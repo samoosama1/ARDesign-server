@@ -1,0 +1,12 @@
+<!-- patents/templates/index.html or another template -->
+
+{% if user.is_authenticated %}
+  <h2>Upload a New Patent</h2>
+  <form action="{% url 'upload-patent' %}" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="file" name="patent_file" required>
+      <button type="submit">Upload</button>
+  </form>
+{% else %}
+  <p>Please <a href="{% url 'login' %}">log in</a> to upload a patent.</p>
+{% endif %}
