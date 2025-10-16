@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-200 flex items-center justify-center min-h-screen py-12">
+
+    <div class="bg-white p-10 rounded-lg shadow-2xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Create Your Account</h2>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <!-- This loops through all fields in the form (username, password, etc.) -->
+            {% for field in form %}
+                <div class="mb-4">
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                        <p class="text-xs text-gray-500 mt-1">{{ field.help_text|safe }}</p>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <p class="text-red-500 text-xs italic mt-1">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <div class="mt-6">
+                <button type="submit" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
+                    Sign Up
+                </button>
+            </div>
+        </form>
+        <p class="text-center text-gray-600 text-sm mt-6">
+            Already have an account?
+            <a class="font-bold text-sm text-blue-500 hover:text-blue-800" href="{% url 'login' %}">
+                Log In
+            </a>
+        </p>
+    </div>
+
+    <script>
+        // This script adds Tailwind CSS classes to the form fields Django generates for us,
+        // so we don't have to write them out manually.
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('form input:not([type="checkbox"])');
+            inputs.forEach(input => {
+                input.classList.add('shadow', 'appearance-none', 'border', 'rounded', 'w-full', 'py-2', 'px-3', 'text-gray-700', 'leading-tight', 'focus:outline-none', 'focus:shadow-outline');
+            });
+            const labels = document.querySelectorAll('form label');
+            labels.forEach(label => {
+                label.classList.add('block', 'text-gray-700', 'text-sm', 'font-bold', 'mb-2');
+            });
+        });
+    </script>
+</body>
+</html>
