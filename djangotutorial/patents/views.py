@@ -1,55 +1,59 @@
-from django.contrib.auth import login
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, redirect
+from django.views import View
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 
-from patents.models import Patent
-from users.forms import CustomUserCreationForm
-from users.models import User
-from .serializers import PatentUploadSerializer
+from .forms import PatentUploadForm
+from .models import Patent  # Add the Patent model import
 
 
 # Create your views here.
+from django.contrib.auth.decorators import login_required
+
+@login_required(login_url='login')
 def index(request):
-    context = {}
+    patents = Patent.objects.all().order_by('-uploaded_at')
+    form = PatentUploadForm()
+    context = {
+        'patents': patents,
+        'form': form,
+    }
     return render(request, 'index.html', context=context)
 
-class UploadPatentView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
-    serializer_class = PatentUploadSerializer
-    permission_classes = [IsAuthenticated] # Add this line
+from .utils import handle_uploaded_file
 
+class UploadPatentView(LoginRequiredMixin, View):
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-def signup(request):
-    """
-    Handles user registration. On a POST request, it validates the form and
-    creates a new user, then logs them in. On a GET request, it displays
-    a blank registration form.
-    """
-    if request.method == 'POST':
-        # If the form is submitted...
-        form = CustomUserCreationForm(request.POST) # Use the custom form
+        form = PatentUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # If the form data is valid, save the user
-            user = form.save()
-            # Log the user in automatically
-            login(request, user)
-            # Redirect to the homepage (you named this 'index' in your patents/urls.py)
-            return redirect('index')
-    else:
-        # If it's a GET request (user just visiting the page), create a blank form
-        form = CustomUserCreationForm() # Use the custom form
+            try:
+                # Get the validated data from the form
+                uploaded_file, model_type, model_filename = form.cleaned_data['patent_file']
+                # Handle file upload and get file type and related files
+                file_type, base_path, stored_files = handle_uploaded_file(
+                    uploaded_file,
+                    request.user.id,
+                    model_type,
+                    model_filename
+                )
+                Patent.objects.create(
+                    user=request.user,
+                    storage_path=base_path,
+                    file_type=file_type,
+                    related_files=stored_files
+                )
+                return redirect('home')
+            except ValueError as e:
+                form.add_error('patent_file', str(e))
+        patents = Patent.objects.all().order_by('-uploaded_at')
+        context = {
+            'patents': patents,
+            'form': form,
+        }
+        return render(request, 'index.html', context=context)
 
-    # Render the signup page with the form
-    return render(request, 'registration/signup.html', {'form': form})
+

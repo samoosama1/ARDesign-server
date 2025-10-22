@@ -13,8 +13,6 @@
 
         <form method="post">
             {% csrf_token %}
-
-            <!-- This loops through all fields in the form (username, password, etc.) -->
             {% for field in form %}
                 <div class="mb-4">
                     {{ field.label_tag }}

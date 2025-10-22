@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'django_extensions'
 ]
 
 MIDDLEWARE = [
@@ -81,7 +82,7 @@ DATABASES = {
         'NAME': 'arpatentdb',
         'USER': 'myuser',
         'PASSWORD': 'samet123',
-        'HOST': 'localhost',
+        'HOST': 'localhost', # TODO: Change to localhost if you run without Docker
         'PORT': '5432'
     }
 }
@@ -135,3 +136,4 @@ MEDIA_URL = '/media/'
 
 LOGIN_REDIRECT_URL = '/patents/' # Redirects to the patents page after login
 
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True

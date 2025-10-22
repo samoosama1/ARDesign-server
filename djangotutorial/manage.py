@@ -17,6 +17,8 @@ def main():
         ) from exc
     execute_from_command_line(sys.argv)
 
+#with open("/app/converter/output/result.obj") as f:
+#    data = f.read()
 
 if __name__ == '__main__':
     main()

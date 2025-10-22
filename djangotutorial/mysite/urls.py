@@ -19,12 +19,13 @@ from django.urls import include, path
 from django.conf.urls.static import static
 from django.conf import settings
 
+from patents.views import index
+
 urlpatterns = [
+    path("", index, name="home"),  # Add root URL pattern
     path("patents/", include("patents.urls")),
     path("users/", include("users.urls")),
     path("admin/", admin.site.urls),
-    path("accounts/", include("django.contrib.auth.urls")),
-
 ]
 
 if settings.DEBUG:

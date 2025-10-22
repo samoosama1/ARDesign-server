@@ -1,0 +1,46 @@
+services:
+  converter:
+    image: youndria/arpatent:1.1
+    container_name: converter
+    volumes:
+      - shared-data:/app/converter
+    networks:
+      - shared-net
+
+  django:
+    build: .
+    container_name: django
+    ports:
+      - "8000:8000"
+    volumes:
+      - shared-data:/app/converter
+    depends_on:
+      - db
+      - converter
+    environment:
+      - POSTGRES_DB=arpatentdb
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=samet123
+    networks:
+      - shared-net
+
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: arpatentdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: samet123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - shared-net
+
+volumes:
+  shared-data:
+  postgres_data:
+
+networks:
+  shared-net:
