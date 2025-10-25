@@ -32,6 +32,8 @@ def get_model_storage_path(user_id, model_type, timestamp=None):
     """
     if timestamp is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    # add random uuid to ensure unique path
+    timestamp += '_' + get_random_string(8)
     return get_storage_path('patents', str(user_id), model_type.lower(), timestamp)
 
 def store_file(file_content, base_path, filename):

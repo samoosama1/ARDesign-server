@@ -10,6 +10,7 @@ class Patent(models.Model):
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
     storage_path = models.CharField(
         max_length=255,
         null = True,
