@@ -82,11 +82,51 @@ DATABASES = {
         'NAME': 'arpatentdb',
         'USER': 'myuser',
         'PASSWORD': 'samet123',
-        'HOST': 'localhost', # TODO: Change to localhost if you run without Docker
+        'HOST': 'db', # TODO: Change to localhost if you run without Docker
         'PORT': '5432'
     }
 }
 
+import sys
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name}: {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '[{levelname}] {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': sys.stdout,
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',  # or DEBUG if you want everything
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Optional: add your app logger
+        'myapp': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -131,7 +171,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
-MEDIA_ROOT = BASE_DIR.parent / 'media'
+MEDIA_ROOT =  '/tmp/demo-media' #BASE_DIR.parent / 'media'
 MEDIA_URL = '/media/'
 
 LOGIN_REDIRECT_URL = '/patents/' # Redirects to the patents page after login

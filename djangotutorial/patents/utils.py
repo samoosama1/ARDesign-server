@@ -38,7 +38,7 @@ def store_file(file_content, base_path, filename):
     """
     Store a file using Django's storage backend
     """
-    safe_name = get_safe_filename(filename)
+    safe_name = filename #get_safe_filename(filename)
     storage_path = get_storage_path(base_path, safe_name)
     return default_storage.save(storage_path, ContentFile(file_content))
 
@@ -66,7 +66,7 @@ def handle_zip_contents(zip_file, user_id, model_type, model_filename):
                 # Skip directories
                 if filename.endswith('/'):
                     continue
-                    
+
                 with z.open(filename) as file:
                     content = file.read()
                     stored_path = store_file(content, base_path, filename)
