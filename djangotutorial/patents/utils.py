@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 import zipfile
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -33,8 +32,8 @@ def get_model_storage_path(user_id, model_type, timestamp=None):
     if timestamp is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     # add random uuid to ensure unique path
-    timestamp += '_' + get_random_string(8)
-    return get_storage_path('patents', str(user_id), model_type.lower(), timestamp)
+    patent_folder = timestamp + '_' + get_random_string(8)
+    return get_storage_path('patents', str(user_id), model_type.lower(), patent_folder)
 
 def store_file(file_content, base_path, filename):
     """
@@ -97,3 +96,22 @@ def handle_uploaded_file(patent_file, user_id, model_type, model_filename):
     except ValueError as e:
         # Re-raise with more context if needed
         raise ValueError(f"Failed to process upload: {str(e)}")
+
+def delete_directory(directory_path):
+    directories, files = default_storage.listdir(directory_path)
+
+    for item in directories:
+        item_path = os.path.join(directory_path, item)
+        if default_storage.exists(item_path):
+            # Recursively delete subdirectories
+            delete_directory(item_path)
+
+    for item in files:
+        item_path = os.path.join(directory_path, item)
+        if default_storage.exists(item_path):
+            # Delete files
+            default_storage.delete(item_path)
+
+    if default_storage.exists(directory_path):
+        # Finally, delete the empty directory
+        default_storage.delete(directory_path)
