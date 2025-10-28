@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views import View
@@ -100,7 +100,7 @@ class UploadPatentView(LoginRequiredMixin, View):
             if patent and glb_file_path:
                 logger.info(f"Successfully converted file to glb, path is: {glb_file_path}")
                 patent.related_files.append(glb_file_path)
-                patent.glb_path = glb_file_path
+                patent.glb_file_path = glb_file_path
                 patent.save()
                 try:
                     logger.info("threading thumbnail generation")
@@ -112,13 +112,18 @@ class UploadPatentView(LoginRequiredMixin, View):
 
         return redirect(reverse('index'))
 
-class ServeQRCodeView(LoginRequiredMixin, View):
+class ServeQRCodeView(View):
     def get(self, request, patent_id):
-        logger.info("Serving QR Code for patent id: {patent_id}")
-        return HttpResponse(f"QR Code generated for {patent_id}")
-        #patent = Patent.objects.get(id=patent_id)
-        #context = {
-        #    'patent': patent,
-        #    'MEDIA_URL': settings.MEDIA_URL,
-        #}
-        #return render(request, 'patent_qr.html', context=context)
+        try:
+            patent = Patent.objects.get(id=patent_id)
+        except Patent.DoesNotExist:
+            return HttpResponse("Patent not found", status=404)
+        abs_path = os.path.join(settings.MEDIA_ROOT, patent.glb_file_path)
+        logger.info("Serving glb file for patent id: {patent_id}")
+        if not os.path.exists(abs_path):
+            logger.error(f"glb_file_path does not exist: {abs_path}")
+            return HttpResponse("GLB file not found", status=404)
+        logger.info("file exists, preparing response")
+        response = FileResponse(open(abs_path, 'rb'), content_type='model/gltf-binary')
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(abs_path)}"'
+        return response

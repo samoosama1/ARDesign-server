@@ -33,6 +33,13 @@ class Patent(models.Model):
         help_text='Paths to related files (MTL, textures, etc.)'
     )
 
+    glb_file_path = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Path to the converted GLB file'
+    )
+
     thumbnail_path = models.CharField(
         max_length=255,
         null=True,
