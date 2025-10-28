@@ -33,5 +33,19 @@ class Patent(models.Model):
         help_text='Paths to related files (MTL, textures, etc.)'
     )
 
+    thumbnail_path = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Path to the thumbnail image'
+    )
+
+    model_filename = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Original model filename'
+    )
+
     def __str__(self):
         return f"Patent {self.id} by {self.user.username}"

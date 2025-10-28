@@ -94,8 +94,12 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '[{levelname}] {asctime} {name}: {message}',
-            'style': '{',
+            'format': (
+                '[%(asctime)s] [%(levelname)s] '
+                '[PID:%(process)d | Thread:%(threadName)s (%(thread)d)] '
+                '[%(filename)s:%(lineno)d] '
+                '%(message)s'
+            ),
         },
         'simple': {
             'format': '[{levelname}] {message}',
@@ -112,20 +116,7 @@ LOGGING = {
     'root': {
         'handlers': ['console'],
         'level': 'INFO',  # or DEBUG if you want everything
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Optional: add your app logger
-        'myapp': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-    },
+    }
 }
 
 # Password validation

@@ -24,6 +24,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='patent',
             name='patent_file',
-            field=models.FileField(help_text='Upload a 3D model file (.obj, .stl, .stp, .iges) or a ZIP containing an OBJ with its MTL and texture files', upload_to=patents.models.get_upload_path, validators=[patents.models.validate_patent_file]),
+            field=models.FileField(help_text='Upload a 3D model file (.obj, .stl, .stp, .iges) or a ZIP containing an OBJ with its MTL and texture files', upload_to="obsolete_upload_path", validators=[]),
         ),
     ]
