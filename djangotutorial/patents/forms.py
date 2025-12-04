@@ -8,7 +8,8 @@ class PatentUploadForm(forms.Form):
         '.obj': 'OBJ',
         '.stl': 'STL',
         '.stp': 'STP',
-        '.iges': 'IGES'
+        '.iges': 'IGES',
+        '.glb' : 'GLB'
     }
 
     patent_file = forms.FileField(

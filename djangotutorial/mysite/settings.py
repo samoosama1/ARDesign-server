@@ -25,8 +25,9 @@ SECRET_KEY = 'django-insecure-gu#-6b0vtmd7_sv#cua8asdya%mdos-l_tn)5n$fnn7yyr$!x^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['postbursal-electrostatic-maxie.ngrok-free.dev']
 
+CSRF_TRUSTED_ORIGINS = ['https://postbursal-electrostatic-maxie.ngrok-free.dev']
 
 # Application definition
 

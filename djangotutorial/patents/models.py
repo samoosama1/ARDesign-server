@@ -7,6 +7,7 @@ class Patent(models.Model):
         ('STL', 'Stereolithography'),
         ('STP', 'STEP File'),
         ('IGES', 'IGES File'),
+        ('GLB', 'GLB File'),
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

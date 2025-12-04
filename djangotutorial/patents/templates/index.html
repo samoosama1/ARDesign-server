@@ -209,7 +209,7 @@
                             const ext = filename.toLowerCase().split('.').pop();
                             dict[ext] = (dict[ext] || 0) + 1;
                         }
-                        if ((dict['iges'] || 0) + (dict['stl'] || 0) + (dict['obj'] || 0) + (dict['stp'] || 0) !== 1) {
+                        if ((dict['iges'] || 0) + (dict['stl'] || 0) + (dict['obj'] || 0) + (dict['stp'] || 0) + (dict['glb'] || 0) !== 1) {
                             reject('there must be one and only one model file!')
                         } else if (dict['obj'] === 1 && dict['mtl'] !== 1) {
                             reject('obj file must have mtl file!')
@@ -238,7 +238,7 @@
 
             // Check file extension
             const ext = '.' + file.name.split('.').pop().toLowerCase();
-            if (['.obj', '.stl', '.iges', '.stp'].includes(ext)) {
+            if (['.obj', '.stl', '.iges', '.stp', '.glb'].includes(ext)) {
                 showError("Model file is correct but please put them in a zip file before upload.")
                 this.value = '';
                 return;

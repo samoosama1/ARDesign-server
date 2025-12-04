@@ -57,12 +57,19 @@ def save_patent_and_convert(form, request):
         except IndexError:
             raise ValueError("Could not determine file path for converter.")
 
+        if main_file_rel_path.endswith('.glb'):
+            patent.glb_file_path = main_file_rel_path
+            patent.save()
+            logger.info(f"Uploaded file is already a GLB, skipping conversion. GLB path: {main_file_rel_path}")
+            return patent, main_file_rel_path
+
         output_folder, result = convert_to_glb(base_path, main_file_rel_path)
 
         if result.returncode == 0:
             logger.info(f"conversion success, output: {result.stdout}")
             glb_file_path = base_path + '/' + 'out.glb'
             return patent, glb_file_path
+
         # conversion failed, delete patent record, remove folder.
         patent.delete()
         delete_directory(output_folder)
@@ -102,11 +109,11 @@ class UploadPatentView(LoginRequiredMixin, View):
                 patent.related_files.append(glb_file_path)
                 patent.glb_file_path = glb_file_path
                 patent.save()
-                try:
-                    logger.info("threading thumbnail generation")
-                    generate_thumbnail_async(patent, glb_file_path)
-                except Exception as e:
-                    logger.error(f"thread couldn't start: {e}", exc_info=True)
+                # try:
+                #     logger.info("threading thumbnail generation")
+                #     generate_thumbnail_async(patent, glb_file_path)
+                # except Exception as e:
+                #     logger.error(f"thread couldn't start: {e}", exc_info=True)
             else:
                 logger.error("Patent saving and conversion failed.")
 
