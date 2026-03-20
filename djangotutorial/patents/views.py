@@ -109,11 +109,11 @@ class UploadPatentView(LoginRequiredMixin, View):
                 patent.related_files.append(glb_file_path)
                 patent.glb_file_path = glb_file_path
                 patent.save()
-                # try:
-                #     logger.info("threading thumbnail generation")
-                #     generate_thumbnail_async(patent, glb_file_path)
-                # except Exception as e:
-                #     logger.error(f"thread couldn't start: {e}", exc_info=True)
+                #try:
+                #    logger.info("threading thumbnail generation")
+                #    generate_thumbnail_async(patent, glb_file_path)
+                #except Exception as e:
+                #    logger.error(f"thread couldn't start: {e}", exc_info=True)
             else:
                 logger.error("Patent saving and conversion failed.")
 

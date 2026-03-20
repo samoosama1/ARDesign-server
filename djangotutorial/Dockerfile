@@ -25,4 +25,4 @@ RUN echo $TZ > /etc/timezone && \
     dpkg-reconfigure -f noninteractive tzdata
 
 ENTRYPOINT ["gunicorn"]
-CMD ["--bind", "0.0.0.0:8000", "mysite.wsgi:application"]
+CMD ["--bind", "0.0.0.0:8000", "mysite.wsgi:application", "--timeout", "600"]

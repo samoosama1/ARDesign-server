@@ -25,9 +25,9 @@ SECRET_KEY = 'django-insecure-gu#-6b0vtmd7_sv#cua8asdya%mdos-l_tn)5n$fnn7yyr$!x^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['postbursal-electrostatic-maxie.ngrok-free.dev']
+ALLOWED_HOSTS = ['100.77.184.26', 'multicolored-arline-thicketed.ngrok-free.dev', 'localhost']
 
-CSRF_TRUSTED_ORIGINS = ['https://postbursal-electrostatic-maxie.ngrok-free.dev']
+CSRF_TRUSTED_ORIGINS = ['https://100.77.184.26', 'https://multicolored-arline-thicketed.ngrok-free.dev']
 
 # Application definition
 
@@ -163,7 +163,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
-MEDIA_ROOT =  '/tmp/demo-media' #BASE_DIR.parent / 'media'
+MEDIA_ROOT = '/app/django/media'
 MEDIA_URL = '/media/'
 
 LOGIN_REDIRECT_URL = '/patents/' # Redirects to the patents page after login
