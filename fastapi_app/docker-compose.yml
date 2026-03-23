@@ -1,0 +1,90 @@
+name: arpatent
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15
+    container_name: arpatent_db
+    environment:
+      POSTGRES_DB: arpatentdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: samet123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d arpatentdb"]
+      interval: 5s
+      retries: 10
+
+  # ── Redis (Celery broker + result backend) ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: arpatent_redis
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # ── FastAPI ─────────────────────────────────────────────────────────────────
+  api:
+    build: .
+    container_name: arpatent_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+      - .:/app                        # hot-reload in dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: arpatentdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: samet123
+      REDIS_URL: redis://redis:6379/0
+      MEDIA_ROOT: /app/media
+    networks:
+      - app-net
+
+  # ── Celery worker ───────────────────────────────────────────────────────────
+  worker:
+    build: .
+    container_name: arpatent_worker
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - media_data:/app/media
+      - .:/app                                   # shares code with api
+      - /var/run/docker.sock:/var/run/docker.sock # DooD: run sibling containers
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: arpatentdb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: samet123
+      REDIS_URL: redis://redis:6379/0
+      MEDIA_ROOT: /app/media
+      # Named volume as it appears on the host Docker daemon.
+      # Fixed because the compose project name is pinned to "arpatent" above.
+      MEDIA_VOLUME_NAME: arpatent_media_data
+    networks:
+      - app-net
+
+volumes:
+  postgres_data:
+  media_data:
+
+networks:
+  app-net:
