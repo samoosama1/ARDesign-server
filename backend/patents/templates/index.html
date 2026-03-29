@@ -1,7 +1,8 @@
+{% load i18n %}
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Patent Dashboard</title>
+    <title>{% trans "Patent Dashboard" %}</title>
     <style>
         .error-message {
             color: #dc3545;
@@ -113,21 +114,60 @@
         button:hover {
             background-color: #0056b3;
         }
+
+        .lang-switcher {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .lang-switcher button {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            background-color: #6c757d;
+        }
+
+        .lang-switcher button:hover {
+            background-color: #545b62;
+        }
     </style>
 </head>
 <body>
+<div id="jsMessages"
+     data-msg-zip-hint="{% trans "Model file is correct but please put them in a zip file before upload." %}"
+     data-msg-size-limit="{% trans "File size cannot exceed 500MB" %}"
+     data-msg-one-model="{% trans "There must be one and only one model file!" %}"
+     data-msg-obj-mtl="{% trans "OBJ file must have an MTL file!" %}"
+     data-msg-invalid-zip="{% trans "Invalid ZIP file" %}"
+     data-msg-select-file="{% trans "Please select a file" %}"
+     data-msg-unsupported-type="{% trans "Unsupported file type. Allowed types are:" %}"
+     style="display:none;"></div>
 <div class="header">
     <div class="user-info">
-        <span>Welcome, {{ user.username }}!</span>
+        <span>{% blocktrans with username=user.username %}Welcome, {{ username }}!{% endblocktrans %}</span>
     </div>
-    <form method="post" action="{% url 'logout_user' %}" class="logout-form">
-        {% csrf_token %}
-        <button type="submit" class="logout-button">Logout</button>
-    </form>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <div class="lang-switcher">
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="en">EN</button>
+            </form>
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="tr">TR</button>
+            </form>
+        </div>
+        <form method="post" action="{% url 'logout_user' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="logout-button">{% trans "Logout" %}</button>
+        </form>
+    </div>
 </div>
 <div class="container">
     <div class="upload-section">
-        <h2>Upload a New Patent</h2>
+        <h2>{% trans "Upload a New Patent" %}</h2>
         <form id="uploadForm" action="{% url 'upload-patent' %}" method="post" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="file-input-wrapper">
@@ -137,34 +177,33 @@
                 </div>
                 <div id="errorMessage" class="error-message"></div>
             </div>
-            <button type="submit" id="uploadButton">Upload</button>
+            <button type="submit" id="uploadButton">{% trans "Upload" %}</button>
 
             {% if form.errors %}
                 <div style="color: red;">
-                    <p>Please correct the errors below:</p>
+                    <p>{% trans "Please correct the errors below:" %}</p>
                     {{ form.errors }}
                 </div>
             {% endif %}
         </form>
     </div>
 
-    <h2>Patent Library</h2>
+    <h2>{% trans "Patent Library" %}</h2>
     <div class="patent-grid">
         {% for patent in patents %}
             <div class="patent-card">
                 <div class="patent-thumbnail">
-                    <!-- Placeholder image for now -->
                     <img src="{{ MEDIA_URL }}{{ patent.thumbnail_path }}"
-                         alt="Patent thumbnail"
+                         alt="{% trans "Patent thumbnail" %}"
                          class="patent-thumbnail">
                 </div>
                 <div class="patent-info">
-                    <p>Patent #{{ patent.id }}</p>
-                    <p>Patent Name: {{ patent.model_filename }} </p>
-                    <p>Uploaded by: {{ patent.user.username }}</p>
-                    <p>Date: {{ patent.uploaded_at|date:"M d, Y" }}</p>
+                    <p>{% blocktrans with id=patent.id %}Patent #{{ id }}{% endblocktrans %}</p>
+                    <p>{% blocktrans with name=patent.model_filename %}Patent Name: {{ name }}{% endblocktrans %}</p>
+                    <p>{% blocktrans with username=patent.user.username %}Uploaded by: {{ username }}{% endblocktrans %}</p>
+                    <p>{% blocktrans with date=patent.uploaded_at|date:"M d, Y" %}Date: {{ date }}{% endblocktrans %}</p>
                     <div class="qrcode-container">
-                        <button class="generate-qr" data-patent-id="{{ patent.id }}">Generate QR Code</button>
+                        <button class="generate-qr" data-patent-id="{{ patent.id }}">{% trans "Generate QR Code" %}</button>
                         <div class="qrcode" id="qrcode-{{ patent.id }}" style="display:none;"></div>
                     </div>
                 </div>
@@ -183,6 +222,7 @@
         const uploadButton = document.getElementById('uploadButton');
         const progressBar = document.querySelector('.progress-bar');
         const progressBarFill = document.querySelector('.progress-bar-fill');
+        const msg = document.getElementById('jsMessages').dataset;
 
         const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
         const ALLOWED_EXTENSIONS = ['.zip'];
@@ -210,14 +250,14 @@
                             dict[ext] = (dict[ext] || 0) + 1;
                         }
                         if ((dict['iges'] || 0) + (dict['stl'] || 0) + (dict['obj'] || 0) + (dict['stp'] || 0) + (dict['glb'] || 0) !== 1) {
-                            reject('there must be one and only one model file!')
+                            reject(msg.msgOneModel);
                         } else if (dict['obj'] === 1 && dict['mtl'] !== 1) {
-                            reject('obj file must have mtl file!')
+                            reject(msg.msgObjMtl);
                         } else {
                             resolve();
                         }
                     } catch (error) {
-                        reject('Invalid ZIP file');
+                        reject(msg.msgInvalidZip);
                     }
                 };
                 reader.readAsArrayBuffer(file);
@@ -231,7 +271,7 @@
 
             // Check file size
             if (file.size > MAX_FILE_SIZE) {
-                showError('File size cannot exceed 500MB');
+                showError(msg.msgSizeLimit);
                 this.value = '';
                 return;
             }
@@ -239,12 +279,12 @@
             // Check file extension
             const ext = '.' + file.name.split('.').pop().toLowerCase();
             if (['.obj', '.stl', '.iges', '.stp', '.glb'].includes(ext)) {
-                showError("Model file is correct but please put them in a zip file before upload.")
+                showError(msg.msgZipHint);
                 this.value = '';
                 return;
             }
             if (!ALLOWED_EXTENSIONS.includes(ext)) {
-                showError(`Unsupported file type. Allowed types are: ${ALLOWED_EXTENSIONS.join(', ')}`);
+                showError(msg.msgUnsupportedType + ' ' + ALLOWED_EXTENSIONS.join(', '));
                 this.value = '';
                 return;
             }
@@ -263,7 +303,7 @@
         form.addEventListener('submit', function (e) {
             if (!fileInput.files[0]) {
                 e.preventDefault();
-                showError('Please select a file');
+                showError(msg.msgSelectFile);
                 return;
             }
 

@@ -1,0 +1,179 @@
+# Turkish translations for ARPatent
+# Copyright (C) 2025
+# This file is distributed under the same license as the ARPatent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ARPatent 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-01 00:00+0000\n"
+"PO-Revision-Date: 2025-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Turkish\n"
+"Language: tr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: patents/templates/index.html
+msgid "Patent Dashboard"
+msgstr "Patent Paneli"
+
+#: patents/templates/index.html
+msgid "Welcome, %(username)s!"
+msgstr "Hoş geldiniz, %(username)s!"
+
+#: patents/templates/index.html
+msgid "Logout"
+msgstr "Çıkış Yap"
+
+#: patents/templates/index.html
+msgid "Upload a New Patent"
+msgstr "Yeni Patent Yükle"
+
+#: patents/templates/index.html
+msgid "Upload"
+msgstr "Yükle"
+
+#: patents/templates/index.html
+msgid "Please correct the errors below:"
+msgstr "Lütfen aşağıdaki hataları düzeltin:"
+
+#: patents/templates/index.html
+msgid "Patent Library"
+msgstr "Patent Kütüphanesi"
+
+#: patents/templates/index.html
+msgid "Patent #%(id)s"
+msgstr "Patent #%(id)s"
+
+#: patents/templates/index.html
+msgid "Patent Name: %(name)s"
+msgstr "Patent Adı: %(name)s"
+
+#: patents/templates/index.html
+msgid "Uploaded by: %(username)s"
+msgstr "Yükleyen: %(username)s"
+
+#: patents/templates/index.html
+msgid "Date: %(date)s"
+msgstr "Tarih: %(date)s"
+
+#: patents/templates/index.html
+msgid "Generate QR Code"
+msgstr "QR Kod Oluştur"
+
+#: patents/templates/index.html
+msgid "Patent thumbnail"
+msgstr "Patent küçük resmi"
+
+#: patents/templates/index.html
+msgid "Model file is correct but please put them in a zip file before upload."
+msgstr "Model dosyası doğru ancak yüklemeden önce lütfen zip dosyasına koyun."
+
+#: patents/templates/index.html
+msgid "File size cannot exceed 500MB"
+msgstr "Dosya boyutu 500MB'ı aşamaz"
+
+#: patents/templates/index.html
+msgid "There must be one and only one model file!"
+msgstr "Yalnızca bir adet model dosyası olmalıdır!"
+
+#: patents/templates/index.html
+msgid "OBJ file must have an MTL file!"
+msgstr "OBJ dosyasının bir MTL dosyası olması gerekir!"
+
+#: patents/templates/index.html
+msgid "Invalid ZIP file"
+msgstr "Geçersiz ZIP dosyası"
+
+#: patents/templates/index.html
+msgid "Please select a file"
+msgstr "Lütfen bir dosya seçin"
+
+#: patents/templates/index.html
+msgid "Unsupported file type. Allowed types are:"
+msgstr "Desteklenmeyen dosya türü. İzin verilen türler:"
+
+#: users/templates/registration/login.html
+msgid "Log In"
+msgstr "Giriş Yap"
+
+#: users/templates/registration/login.html
+msgid "Welcome Back!"
+msgstr "Tekrar Hoş Geldiniz!"
+
+#: users/templates/registration/login.html
+msgid "Error:"
+msgstr "Hata:"
+
+#: users/templates/registration/login.html
+msgid "Your username and password didn't match. Please try again."
+msgstr "Kullanıcı adı ve şifreniz eşleşmedi. Lütfen tekrar deneyin."
+
+#: users/templates/registration/login.html
+msgid "Don't have an account?"
+msgstr "Hesabınız yok mu?"
+
+#: users/templates/registration/signup.html
+msgid "Sign Up"
+msgstr "Kayıt Ol"
+
+#: users/templates/registration/signup.html
+msgid "Create Your Account"
+msgstr "Hesabınızı Oluşturun"
+
+#: users/templates/registration/signup.html
+msgid "Already have an account?"
+msgstr "Zaten bir hesabınız var mı?"
+
+#: patents/forms.py
+msgid "Upload a ZIP file containing your patent model files."
+msgstr "Patent model dosyalarınızı içeren bir ZIP dosyası yükleyin."
+
+#: patents/forms.py
+msgid "No file uploaded"
+msgstr "Dosya yüklenmedi"
+
+#: patents/forms.py
+msgid "File size cannot exceed 500MB"
+msgstr "Dosya boyutu 500MB'ı aşamaz"
+
+#: patents/forms.py
+msgid ""
+"Only ZIP files are allowed. Please compress your model files into a ZIP "
+"archive."
+msgstr ""
+"Yalnızca ZIP dosyalarına izin verilmektedir. Lütfen model dosyalarınızı ZIP "
+"arşivine sıkıştırın."
+
+#: patents/forms.py
+msgid "ZIP must contain exactly one model file (.obj, .stl, .stp, or .iges)"
+msgstr ""
+"ZIP dosyası tam olarak bir model dosyası içermelidir (.obj, .stl, .stp veya "
+".iges)"
+
+#: patents/forms.py
+msgid "OBJ files must be accompanied by exactly one MTL file"
+msgstr "OBJ dosyalarına tam olarak bir MTL dosyası eşlik etmelidir"
+
+#: patents/forms.py
+msgid "Invalid or corrupted ZIP file"
+msgstr "Geçersiz veya bozuk ZIP dosyası"
+
+#: patents/views.py
+msgid "Patent not found"
+msgstr "Patent bulunamadı"
+
+#: patents/views.py
+msgid "GLB file not found"
+msgstr "GLB dosyası bulunamadı"
+
+#: config/settings.py
+msgid "English"
+msgstr "İngilizce"
+
+#: config/settings.py
+msgid "Turkish"
+msgstr "Türkçe"

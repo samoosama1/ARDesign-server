@@ -3,7 +3,7 @@ FROM youndria/arpatent:1.1
 WORKDIR /app/django
 
 # Install venv support
-RUN apt-get update && apt-get install -y python3-venv python3-pip --no-install-recommends \
+RUN apt-get update && apt-get install -y python3-venv python3-pip gettext --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -24,5 +24,8 @@ RUN echo $TZ > /etc/timezone && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
-ENTRYPOINT ["gunicorn"]
+COPY entrypoint.sh /app/django/entrypoint.sh
+RUN chmod +x /app/django/entrypoint.sh
+
+ENTRYPOINT ["/app/django/entrypoint.sh"]
 CMD ["--bind", "0.0.0.0:8000", "config.wsgi:application", "--timeout", "600"]

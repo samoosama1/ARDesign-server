@@ -11,6 +11,7 @@ from django.conf import settings
 from .forms import PatentUploadForm
 from .models import Patent
 from django.contrib.auth.decorators import login_required
+from django.utils.translation import gettext as _
 
 import logging
 
@@ -118,12 +119,12 @@ class ServeQRCodeView(View):
         try:
             patent = Patent.objects.get(id=patent_id)
         except Patent.DoesNotExist:
-            return HttpResponse("Patent not found", status=404)
+            return HttpResponse(_("Patent not found"), status=404)
         abs_path = os.path.join(settings.MEDIA_ROOT, patent.glb_file_path)
         logger.info(f"Serving glb file for patent id: {patent_id}")
         if not os.path.exists(abs_path):
             logger.error(f"glb_file_path does not exist: {abs_path}")
-            return HttpResponse("GLB file not found", status=404)
+            return HttpResponse(_("GLB file not found"), status=404)
         logger.info("file exists, preparing response")
         response = FileResponse(open(abs_path, 'rb'), content_type='model/gltf-binary')
         response['Content-Disposition'] = f'attachment; filename="{os.path.basename(abs_path)}"'

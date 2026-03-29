@@ -1,0 +1,173 @@
+# English translations for ARPatent
+# Copyright (C) 2025
+# This file is distributed under the same license as the ARPatent package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ARPatent 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-01 00:00+0000\n"
+"PO-Revision-Date: 2025-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: patents/templates/index.html
+msgid "Patent Dashboard"
+msgstr "Patent Dashboard"
+
+#: patents/templates/index.html
+msgid "Welcome, %(username)s!"
+msgstr "Welcome, %(username)s!"
+
+#: patents/templates/index.html
+msgid "Logout"
+msgstr "Logout"
+
+#: patents/templates/index.html
+msgid "Upload a New Patent"
+msgstr "Upload a New Patent"
+
+#: patents/templates/index.html
+msgid "Upload"
+msgstr "Upload"
+
+#: patents/templates/index.html
+msgid "Please correct the errors below:"
+msgstr "Please correct the errors below:"
+
+#: patents/templates/index.html
+msgid "Patent Library"
+msgstr "Patent Library"
+
+#: patents/templates/index.html
+msgid "Patent #%(id)s"
+msgstr "Patent #%(id)s"
+
+#: patents/templates/index.html
+msgid "Patent Name: %(name)s"
+msgstr "Patent Name: %(name)s"
+
+#: patents/templates/index.html
+msgid "Uploaded by: %(username)s"
+msgstr "Uploaded by: %(username)s"
+
+#: patents/templates/index.html
+msgid "Date: %(date)s"
+msgstr "Date: %(date)s"
+
+#: patents/templates/index.html
+msgid "Generate QR Code"
+msgstr "Generate QR Code"
+
+#: patents/templates/index.html
+msgid "Patent thumbnail"
+msgstr "Patent thumbnail"
+
+#: patents/templates/index.html
+msgid "Model file is correct but please put them in a zip file before upload."
+msgstr ""
+"Model file is correct but please put them in a zip file before upload."
+
+#: patents/templates/index.html
+msgid "File size cannot exceed 500MB"
+msgstr "File size cannot exceed 500MB"
+
+#: patents/templates/index.html
+msgid "There must be one and only one model file!"
+msgstr "There must be one and only one model file!"
+
+#: patents/templates/index.html
+msgid "OBJ file must have an MTL file!"
+msgstr "OBJ file must have an MTL file!"
+
+#: patents/templates/index.html
+msgid "Invalid ZIP file"
+msgstr "Invalid ZIP file"
+
+#: patents/templates/index.html
+msgid "Please select a file"
+msgstr "Please select a file"
+
+#: patents/templates/index.html
+msgid "Unsupported file type. Allowed types are:"
+msgstr "Unsupported file type. Allowed types are:"
+
+#: users/templates/registration/login.html
+msgid "Log In"
+msgstr "Log In"
+
+#: users/templates/registration/login.html
+msgid "Welcome Back!"
+msgstr "Welcome Back!"
+
+#: users/templates/registration/login.html
+msgid "Error:"
+msgstr "Error:"
+
+#: users/templates/registration/login.html
+msgid "Your username and password didn't match. Please try again."
+msgstr "Your username and password didn't match. Please try again."
+
+#: users/templates/registration/login.html
+msgid "Don't have an account?"
+msgstr "Don't have an account?"
+
+#: users/templates/registration/signup.html
+msgid "Sign Up"
+msgstr "Sign Up"
+
+#: users/templates/registration/signup.html
+msgid "Create Your Account"
+msgstr "Create Your Account"
+
+#: users/templates/registration/signup.html
+msgid "Already have an account?"
+msgstr "Already have an account?"
+
+#: patents/forms.py
+msgid "Upload a ZIP file containing your patent model files."
+msgstr "Upload a ZIP file containing your patent model files."
+
+#: patents/forms.py
+msgid "No file uploaded"
+msgstr "No file uploaded"
+
+#: patents/forms.py
+msgid ""
+"Only ZIP files are allowed. Please compress your model files into a ZIP "
+"archive."
+msgstr ""
+"Only ZIP files are allowed. Please compress your model files into a ZIP "
+"archive."
+
+#: patents/forms.py
+msgid "ZIP must contain exactly one model file (.obj, .stl, .stp, or .iges)"
+msgstr "ZIP must contain exactly one model file (.obj, .stl, .stp, or .iges)"
+
+#: patents/forms.py
+msgid "OBJ files must be accompanied by exactly one MTL file"
+msgstr "OBJ files must be accompanied by exactly one MTL file"
+
+#: patents/forms.py
+msgid "Invalid or corrupted ZIP file"
+msgstr "Invalid or corrupted ZIP file"
+
+#: patents/views.py
+msgid "Patent not found"
+msgstr "Patent not found"
+
+#: patents/views.py
+msgid "GLB file not found"
+msgstr "GLB file not found"
+
+#: config/settings.py
+msgid "English"
+msgstr "English"
+
+#: config/settings.py
+msgid "Turkish"
+msgstr "Turkish"

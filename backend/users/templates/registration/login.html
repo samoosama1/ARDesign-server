@@ -1,27 +1,39 @@
+{% load i18n %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log In</title>
+    <title>{% trans "Log In" %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-200 flex items-center justify-center min-h-screen py-12">
 
     <div class="bg-white p-10 rounded-lg shadow-2xl w-full max-w-md">
-        <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Welcome Back!</h2>
+        <div class="flex justify-end gap-2 mb-4">
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="en" class="text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">EN</button>
+            </form>
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="tr" class="text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">TR</button>
+            </form>
+        </div>
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">{% trans "Welcome Back!" %}</h2>
 
         {% if form.errors %}
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <strong class="font-bold">Error:</strong>
-                <span class="block sm:inline">Your username and password didn't match. Please try again.</span>
+                <strong class="font-bold">{% trans "Error:" %}</strong>
+                <span class="block sm:inline">{% trans "Your username and password didn't match. Please try again." %}</span>
             </div>
         {% endif %}
 
         <form method="post">
             {% csrf_token %}
 
-            <!-- This loops through all fields in the form (username, password) -->
             {% for field in form %}
                 <div class="mb-4">
                     {{ field.label_tag }}
@@ -34,20 +46,19 @@
 
             <div class="mt-6">
                 <button type="submit" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300">
-                    Log In
+                    {% trans "Log In" %}
                 </button>
             </div>
         </form>
         <p class="text-center text-gray-600 text-sm mt-6">
-            Don't have an account?
+            {% trans "Don't have an account?" %}
             <a class="font-bold text-sm text-blue-500 hover:text-blue-800" href="{% url 'signup' %}">
-                Sign Up
+                {% trans "Sign Up" %}
             </a>
         </p>
     </div>
 
     <script>
-        // This script adds Tailwind CSS classes to the form fields Django generates.
         document.addEventListener('DOMContentLoaded', function() {
             const inputs = document.querySelectorAll('form input:not([type="checkbox"])');
             inputs.forEach(input => {
