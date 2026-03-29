@@ -9,13 +9,12 @@ from django.views import View
 
 from django.conf import settings
 from .forms import PatentUploadForm
-from .models import Patent  # Add the Patent model import
-# Create your views here.
+from .models import Patent
 from django.contrib.auth.decorators import login_required
 
-import logging
+from config.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @login_required(login_url='login')
@@ -30,7 +29,7 @@ def index(request):
     return render(request, 'index.html', context=context)
 
 
-from .utils import handle_uploaded_file, delete_directory, generate_thumbnail_async
+from .utils import handle_uploaded_file, delete_directory
 
 
 def save_patent_and_convert(form, request):
@@ -109,11 +108,6 @@ class UploadPatentView(LoginRequiredMixin, View):
                 patent.related_files.append(glb_file_path)
                 patent.glb_file_path = glb_file_path
                 patent.save()
-                #try:
-                #    logger.info("threading thumbnail generation")
-                #    generate_thumbnail_async(patent, glb_file_path)
-                #except Exception as e:
-                #    logger.error(f"thread couldn't start: {e}", exc_info=True)
             else:
                 logger.error("Patent saving and conversion failed.")
 
@@ -126,7 +120,7 @@ class ServeQRCodeView(View):
         except Patent.DoesNotExist:
             return HttpResponse("Patent not found", status=404)
         abs_path = os.path.join(settings.MEDIA_ROOT, patent.glb_file_path)
-        logger.info("Serving glb file for patent id: {patent_id}")
+        logger.info(f"Serving glb file for patent id: {patent_id}")
         if not os.path.exists(abs_path):
             logger.error(f"glb_file_path does not exist: {abs_path}")
             return HttpResponse("GLB file not found", status=404)

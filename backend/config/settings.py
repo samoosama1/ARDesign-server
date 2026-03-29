@@ -104,10 +104,6 @@ LOGGING = {
                 '%(message)s'
             ),
         },
-        'simple': {
-            'format': '[{levelname}] {message}',
-            'style': '{',
-        },
     },
     'handlers': {
         'console': {
