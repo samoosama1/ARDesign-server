@@ -10,8 +10,7 @@ COPY requirements.txt .
 
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt gunicorn \
-    && /opt/venv/bin/pip install --no-cache-dir trimesh==4.4.9 Pillow==10.4.0 numpy==1.26.4
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY . .
 
