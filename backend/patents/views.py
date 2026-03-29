@@ -12,9 +12,9 @@ from .forms import PatentUploadForm
 from .models import Patent
 from django.contrib.auth.decorators import login_required
 
-from config.logging import get_logger
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @login_required(login_url='login')
