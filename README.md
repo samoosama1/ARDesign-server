@@ -16,7 +16,7 @@ cd ARDesign-server
 ## Configure
 
 ```bash
-cd djangotutorial
+cd backend
 cp .env.example .env
 ```
 
@@ -66,7 +66,7 @@ docker compose down -v
 
 ## Environment Variables
 
-Defined in `djangotutorial/.env` (not committed). See `.env.example` for the template.
+Defined in `backend/.env` (not committed). See `.env.example` for the template.
 
 | Variable | Description |
 |----------|-------------|

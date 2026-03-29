@@ -15,7 +15,7 @@ RUN python3 -m venv /opt/venv \
 
 COPY . .
 
-ENV DJANGO_SETTINGS_MODULE=mysite.settings
+ENV DJANGO_SETTINGS_MODULE=config.settings
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 ENV TZ=Europe/Istanbul
@@ -25,4 +25,4 @@ RUN echo $TZ > /etc/timezone && \
     dpkg-reconfigure -f noninteractive tzdata
 
 ENTRYPOINT ["gunicorn"]
-CMD ["--bind", "0.0.0.0:8000", "mysite.wsgi:application", "--timeout", "600"]
+CMD ["--bind", "0.0.0.0:8000", "config.wsgi:application", "--timeout", "600"]
