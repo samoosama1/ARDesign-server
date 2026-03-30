@@ -73,8 +73,8 @@ msgstr ""
 "Model file is correct but please put them in a zip file before upload."
 
 #: patents/templates/index.html
-msgid "File size cannot exceed 500MB"
-msgstr "File size cannot exceed 500MB"
+msgid "File size cannot exceed %(limit)s MB"
+msgstr "File size cannot exceed %(limit)s MB"
 
 #: patents/templates/index.html
 msgid "There must be one and only one model file!"
@@ -155,6 +155,34 @@ msgstr "OBJ files must be accompanied by exactly one MTL file"
 #: patents/forms.py
 msgid "Invalid or corrupted ZIP file"
 msgstr "Invalid or corrupted ZIP file"
+
+#: patents/forms.py
+msgid "ZIP contains too many files (maximum %(max)d)"
+msgstr "ZIP contains too many files (maximum %(max)d)"
+
+#: patents/forms.py
+msgid "ZIP contains symbolic links"
+msgstr "ZIP contains symbolic links"
+
+#: patents/forms.py
+msgid "ZIP contains path traversal attack"
+msgstr "ZIP contains path traversal attack"
+
+#: patents/forms.py
+msgid "ZIP contains a file exceeding %(limit)s MB"
+msgstr "ZIP contains a file exceeding %(limit)s MB"
+
+#: patents/forms.py
+msgid "Total uncompressed size exceeds %(limit)s MB"
+msgstr "Total uncompressed size exceeds %(limit)s MB"
+
+#: patents/forms.py
+msgid "ZIP file failed security scan"
+msgstr "ZIP file failed security scan"
+
+#: patents/forms.py
+msgid "File content does not match expected model format (detected: %(mime)s)"
+msgstr "File content does not match expected model format (detected: %(mime)s)"
 
 #: patents/views.py
 msgid "Patent not found"

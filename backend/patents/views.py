@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.views import View
 
 from django.conf import settings
-from .forms import PatentUploadForm
+from .forms import PatentUploadForm, MAX_UPLOAD_SIZE
 from .models import Patent
 from django.contrib.auth.decorators import login_required
 from django.utils.translation import gettext as _
@@ -26,6 +26,8 @@ def index(request):
         'patents': patents,
         'form': form,
         'MEDIA_URL': settings.MEDIA_URL,
+        'MAX_UPLOAD_SIZE_MB': MAX_UPLOAD_SIZE // (1024 * 1024),
+        'MAX_UPLOAD_SIZE_BYTES': MAX_UPLOAD_SIZE,
     }
     return render(request, 'index.html', context=context)
 
@@ -95,6 +97,8 @@ class UploadPatentView(LoginRequiredMixin, View):
             'patents': patents,
             'form': PatentUploadForm(),
             'MEDIA_URL': settings.MEDIA_URL,
+            'MAX_UPLOAD_SIZE_MB': MAX_UPLOAD_SIZE // (1024 * 1024),
+            'MAX_UPLOAD_SIZE_BYTES': MAX_UPLOAD_SIZE,
         }
         return render(request, 'index.html', context=context)
 

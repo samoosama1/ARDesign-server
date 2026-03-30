@@ -73,8 +73,8 @@ msgid "Model file is correct but please put them in a zip file before upload."
 msgstr "Model dosyası doğru ancak yüklemeden önce lütfen zip dosyasına koyun."
 
 #: patents/templates/index.html
-msgid "File size cannot exceed 500MB"
-msgstr "Dosya boyutu 500MB'ı aşamaz"
+msgid "File size cannot exceed %(limit)s MB"
+msgstr "Dosya boyutu %(limit)s MB'ı aşamaz"
 
 #: patents/templates/index.html
 msgid "There must be one and only one model file!"
@@ -137,10 +137,6 @@ msgid "No file uploaded"
 msgstr "Dosya yüklenmedi"
 
 #: patents/forms.py
-msgid "File size cannot exceed 500MB"
-msgstr "Dosya boyutu 500MB'ı aşamaz"
-
-#: patents/forms.py
 msgid ""
 "Only ZIP files are allowed. Please compress your model files into a ZIP "
 "archive."
@@ -161,6 +157,34 @@ msgstr "OBJ dosyalarına tam olarak bir MTL dosyası eşlik etmelidir"
 #: patents/forms.py
 msgid "Invalid or corrupted ZIP file"
 msgstr "Geçersiz veya bozuk ZIP dosyası"
+
+#: patents/forms.py
+msgid "ZIP contains too many files (maximum %(max)d)"
+msgstr "ZIP çok fazla dosya içeriyor (maksimum %(max)d)"
+
+#: patents/forms.py
+msgid "ZIP contains symbolic links"
+msgstr "ZIP sembolik bağlantılar içeriyor"
+
+#: patents/forms.py
+msgid "ZIP contains path traversal attack"
+msgstr "ZIP dosyası yol geçişi saldırısı içeriyor"
+
+#: patents/forms.py
+msgid "ZIP contains a file exceeding %(limit)s MB"
+msgstr "ZIP %(limit)s MB'ı aşan bir dosya içeriyor"
+
+#: patents/forms.py
+msgid "Total uncompressed size exceeds %(limit)s MB"
+msgstr "Toplam açılmış boyut %(limit)s MB'ı aşıyor"
+
+#: patents/forms.py
+msgid "ZIP file failed security scan"
+msgstr "ZIP dosyası güvenlik taramasını geçemedi"
+
+#: patents/forms.py
+msgid "File content does not match expected model format (detected: %(mime)s)"
+msgstr "Dosya içeriği beklenen model formatıyla eşleşmiyor (algılanan: %(mime)s)"
 
 #: patents/views.py
 msgid "Patent not found"

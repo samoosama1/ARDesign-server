@@ -3,7 +3,7 @@ FROM youndria/arpatent:1.1
 WORKDIR /app/django
 
 # Install venv support
-RUN apt-get update && apt-get install -y python3-venv python3-pip gettext --no-install-recommends \
+RUN apt-get update && apt-get install -y python3-venv python3-pip gettext libmagic1 --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

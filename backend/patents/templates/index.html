@@ -135,7 +135,7 @@
 <body>
 <div id="jsMessages"
      data-msg-zip-hint="{% trans "Model file is correct but please put them in a zip file before upload." %}"
-     data-msg-size-limit="{% trans "File size cannot exceed 500MB" %}"
+     data-msg-size-limit="{% blocktrans with limit=MAX_UPLOAD_SIZE_MB %}File size cannot exceed {{ limit }} MB{% endblocktrans %}"
      data-msg-one-model="{% trans "There must be one and only one model file!" %}"
      data-msg-obj-mtl="{% trans "OBJ file must have an MTL file!" %}"
      data-msg-invalid-zip="{% trans "Invalid ZIP file" %}"
@@ -224,7 +224,7 @@
         const progressBarFill = document.querySelector('.progress-bar-fill');
         const msg = document.getElementById('jsMessages').dataset;
 
-        const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+        const MAX_FILE_SIZE = {{ MAX_UPLOAD_SIZE_BYTES }};
         const ALLOWED_EXTENSIONS = ['.zip'];
 
         function showError(message) {

@@ -25,15 +25,21 @@ def get_model_storage_path(user_id, model_type, timestamp=None):
     patent_folder = timestamp + '_' + get_random_string(8)
     return get_storage_path('patents', str(user_id), model_type.lower(), patent_folder)
 
+def sanitize_filename(filename):
+    basename = os.path.basename(filename)
+    if not basename or basename.startswith('.'):
+        raise ValueError(f"Invalid filename: {filename}")
+    if '..' in basename or '\x00' in basename:
+        raise ValueError(f"Unsafe filename: {filename}")
+    return basename
+
+
 def store_file(file_content, base_path, filename):
-    """
-    Store a file using Django's storage backend
-    """
-    safe_name = filename
+    safe_name = sanitize_filename(filename)
     storage_path = get_storage_path(base_path, safe_name)
     return default_storage.save(storage_path, ContentFile(file_content))
 
-def handle_zip_contents(zip_file, user_id, model_type, model_filename):
+def handle_zip_contents(zip_file, user_id, model_type):
     """
     Process pre-validated ZIP file contents and store in user's directory
     Returns: (base_path, stored_files)
@@ -42,7 +48,6 @@ def handle_zip_contents(zip_file, user_id, model_type, model_filename):
         zip_file: The validated ZIP file object
         user_id: The ID of the user uploading the file
         model_type: The type of the model file (e.g., 'OBJ', 'STL')
-        model_filename: The filename of the main model file in the ZIP
     """
     stored_files = []
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -53,14 +58,13 @@ def handle_zip_contents(zip_file, user_id, model_type, model_filename):
 
         # Extract and store all files from the ZIP
         with zipfile.ZipFile(zip_file) as z:
-            for filename in z.namelist():
-                # Skip directories
-                if filename.endswith('/'):
+            for info in z.infolist():
+                if info.filename.endswith('/') or info.is_dir():
                     continue
 
-                with z.open(filename) as file:
+                with z.open(info) as file:
                     content = file.read()
-                    stored_path = store_file(content, base_path, filename)
+                    stored_path = store_file(content, base_path, info.filename)
                     stored_files.append(stored_path)
 
         return base_path, stored_files
