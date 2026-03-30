@@ -23,6 +23,8 @@ RUN echo $TZ > /etc/timezone && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
+RUN DJANGO_SECRET_KEY=build-placeholder python manage.py collectstatic --noinput
+
 COPY entrypoint.sh /app/django/entrypoint.sh
 RUN chmod +x /app/django/entrypoint.sh
 

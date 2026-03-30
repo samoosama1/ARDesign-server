@@ -2,10 +2,9 @@ services:
   django:
     build: .
     container_name: django
-    ports:
-      - "8000:8000"
     volumes:
       - media_data:/app/django/media
+      - static_data:/app/django/staticfiles
     depends_on:
       - db
     environment:
@@ -26,8 +25,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -36,6 +33,7 @@ services:
 volumes:
   postgres_data:
   media_data:
+  static_data:
 
 networks:
   shared-net:
