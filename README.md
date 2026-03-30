@@ -22,6 +22,13 @@ cp .env.example .env
 
 Edit `.env` and set your own values for `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD`.
 
+For production, also set:
+```
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=yourdomain.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+```
+
 ## Start
 
 ```bash
@@ -32,13 +39,7 @@ This starts two containers:
 - **django** — Gunicorn serving the app on port 8000
 - **db** — PostgreSQL 15
 
-## Run Migrations
-
-In a separate terminal:
-
-```bash
-docker exec -it django python manage.py migrate
-```
+Migrations run automatically on startup.
 
 ## Create a Superuser (optional)
 
@@ -68,9 +69,12 @@ docker compose down -v
 
 Defined in `backend/.env` (not committed). See `.env.example` for the template.
 
-| Variable | Description |
-|----------|-------------|
-| `DJANGO_SECRET_KEY` | Django secret key for cryptographic signing |
-| `POSTGRES_DB` | Database name |
-| `POSTGRES_USER` | Database user |
-| `POSTGRES_PASSWORD` | Database password |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DJANGO_SECRET_KEY` | Django secret key for cryptographic signing | `change-me-in-production` |
+| `DJANGO_DEBUG` | Enable debug mode | `True` |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hostnames | `localhost` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins for CSRF | *(empty)* |
+| `POSTGRES_DB` | Database name | `arpatentdb` |
+| `POSTGRES_USER` | Database user | `myuser` |
+| `POSTGRES_PASSWORD` | Database password | *(required)* |
