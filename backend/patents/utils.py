@@ -84,7 +84,7 @@ def handle_uploaded_file(patent_file, user_id, model_type, model_filename):
         model_filename: The filename of the main model file
     """
     try:
-        base_path, stored_files = handle_zip_contents(patent_file, user_id, model_type, model_filename)
+        base_path, stored_files = handle_zip_contents(patent_file, user_id, model_type)
         return model_type, base_path, stored_files
     except ValueError as e:
         raise ValueError(f"Failed to process upload: {str(e)}")
