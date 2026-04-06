@@ -5,3 +5,4 @@ out.txt
 **/.idea/
 .env
 django.mo
+/fastapi_app
