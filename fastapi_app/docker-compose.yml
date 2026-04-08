@@ -52,6 +52,8 @@ services:
       POSTGRES_PASSWORD: samet123
       REDIS_URL: redis://redis:6379/0
       MEDIA_ROOT: /app/media
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     networks:
       - app-net
 
@@ -76,6 +78,7 @@ services:
       POSTGRES_PASSWORD: samet123
       REDIS_URL: redis://redis:6379/0
       MEDIA_ROOT: /app/media
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-me}
       # Named volume as it appears on the host Docker daemon.
       # Fixed because the compose project name is pinned to "arpatent" above.
       MEDIA_VOLUME_NAME: arpatent_media_data

@@ -4,3 +4,4 @@
 out.txt
 **/.idea/
 /backend
+/fastapi_app/frontend/.vite
