@@ -171,7 +171,7 @@
         <form id="uploadForm" action="{% url 'upload-patent' %}" method="post" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="file-input-wrapper">
-                <input type="file" name="patent_file" id="patentFile" required accept=".obj,.stl,.stp,.iges,.zip">
+                <input type="file" name="patent_file" id="patentFile" required accept=".obj,.stl,.stp,.iges,.glb,.fbx,.zip">
                 <div class="progress-bar">
                     <div class="progress-bar-fill"></div>
                 </div>
@@ -249,7 +249,7 @@
                             const ext = filename.toLowerCase().split('.').pop();
                             dict[ext] = (dict[ext] || 0) + 1;
                         }
-                        if ((dict['iges'] || 0) + (dict['stl'] || 0) + (dict['obj'] || 0) + (dict['stp'] || 0) + (dict['glb'] || 0) !== 1) {
+                        if ((dict['iges'] || 0) + (dict['stl'] || 0) + (dict['obj'] || 0) + (dict['stp'] || 0) + (dict['glb'] || 0) + (dict['fbx'] || 0) !== 1) {
                             reject(msg.msgOneModel);
                         } else if (dict['obj'] === 1 && dict['mtl'] !== 1) {
                             reject(msg.msgObjMtl);
@@ -278,7 +278,7 @@
 
             // Check file extension
             const ext = '.' + file.name.split('.').pop().toLowerCase();
-            if (['.obj', '.stl', '.iges', '.stp', '.glb'].includes(ext)) {
+            if (['.obj', '.stl', '.iges', '.stp', '.glb', '.fbx'].includes(ext)) {
                 showError(msg.msgZipHint);
                 this.value = '';
                 return;

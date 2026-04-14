@@ -84,6 +84,7 @@ class PatentUploadForm(forms.Form):
         '.stp': 'STP',
         '.iges': 'IGES',
         '.glb': 'GLB',
+        '.fbx': 'FBX',
     }
 
     patent_file = forms.FileField(
@@ -142,12 +143,12 @@ class PatentUploadForm(forms.Form):
                 for ext, files in model_files.items():
                     if files:
                         if model_type is not None:
-                            raise ValidationError(_('ZIP must contain exactly one model file (.obj, .stl, .stp, or .iges)'))
+                            raise ValidationError(_('ZIP must contain exactly one model file (.obj, .stl, .stp, .iges, .glb, or .fbx)'))
                         model_type = self.MODEL_TYPES[ext]
                         model_filename = files[0]
 
                 if model_type is None:
-                    raise ValidationError(_('ZIP must contain exactly one model file (.obj, .stl, .stp, or .iges)'))
+                    raise ValidationError(_('ZIP must contain exactly one model file (.obj, .stl, .stp, .iges, .glb, or .fbx)'))
 
                 if model_type == 'OBJ':
                     if len(mtl_files) != 1:
