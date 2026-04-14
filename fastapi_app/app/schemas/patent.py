@@ -24,6 +24,8 @@ class PatentStatusResponse(BaseModel):
 
 class PatentListItem(BaseModel):
     id: int
+    user_id: int
+    uploaded_by: str
     model_filename: str | None
     file_type: FileType | None
     status: ConversionStatus = Field(validation_alias="conversion_status")

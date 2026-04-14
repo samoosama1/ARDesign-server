@@ -159,8 +159,9 @@ export default function DashboardPage() {
               <h3>{p.model_filename}</h3>
               <span className={statusClass(p.status)}>{p.status}</span>
               <p className="meta">Type: {p.file_type}</p>
+              <p className="meta">Uploaded by: {p.uploaded_by}</p>
               <p className="meta">{new Date(p.uploaded_at).toLocaleDateString()}</p>
-              {p.status === 'UPLOADED' && (
+              {p.user_id === user?.id && p.status === 'UPLOADED' && (
                 <div className="card-actions">
                   <ActionButton variant="primary" onClick={() => handleConvert(p.id)}>
                     Convert
@@ -177,18 +178,20 @@ export default function DashboardPage() {
                   </ActionButton>
                 </div>
               )}
-              {p.status === 'FAILED' && (
+              {p.user_id === user?.id && p.status === 'FAILED' && (
                 <div className="card-actions">
                   <ActionButton variant="primary" onClick={() => handleConvert(p.id)}>
                     Retry
                   </ActionButton>
                 </div>
               )}
-              <div className="card-actions">
-                <ActionButton variant="danger" onClick={() => handleDelete(p.id)}>
-                  Delete
-                </ActionButton>
-              </div>
+              {p.user_id === user?.id && (
+                <div className="card-actions">
+                  <ActionButton variant="danger" onClick={() => handleDelete(p.id)}>
+                    Delete
+                  </ActionButton>
+                </div>
+              )}
             </div>
           ))}
         </section>

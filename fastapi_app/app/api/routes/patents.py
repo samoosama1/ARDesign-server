@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user
@@ -153,10 +154,22 @@ async def list_patents(
 ):
     result = await db.execute(
         select(Patent)
-        .where(Patent.user_id == current_user.id)
+        .options(selectinload(Patent.user))
         .order_by(Patent.uploaded_at.desc())
     )
-    return result.scalars().all()
+    patents = result.scalars().all()
+    return [
+        PatentListItem(
+            id=p.id,
+            user_id=p.user_id,
+            uploaded_by=p.user.username,
+            model_filename=p.model_filename,
+            file_type=p.file_type,
+            conversion_status=p.conversion_status,
+            uploaded_at=p.uploaded_at,
+        )
+        for p in patents
+    ]
 
 
 # -- Serve GLB -----------------------------------------------------------------
