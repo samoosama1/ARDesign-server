@@ -17,6 +17,7 @@ class FileType(str, enum.Enum):
     STP = "STP"
     IGES = "IGES"
     GLB = "GLB"
+    FBX = "FBX"
 
 
 class ConversionStatus(str, enum.Enum):

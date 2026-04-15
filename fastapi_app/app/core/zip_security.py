@@ -29,6 +29,7 @@ MODEL_EXTENSIONS: dict[str, str] = {
     ".stp": "STP",
     ".iges": "IGES",
     ".glb": "GLB",
+    ".fbx": "FBX",
 }
 
 # MIME types that 3D model files legitimately produce via libmagic.
@@ -142,7 +143,7 @@ def validate_zip_upload(content: bytes, filename: str) -> tuple[str, str]:
                     mtl_files.append(name)
 
             if found_ext is None:
-                raise _reject("ZIP must contain a supported model file (.obj .stl .stp .iges .glb).")
+                raise _reject("ZIP must contain a supported model file (.obj .stl .stp .iges .glb .fbx).")
 
             if found_ext == ".obj" and len(mtl_files) != 1:
                 raise _reject("OBJ uploads must include exactly one .mtl file.")

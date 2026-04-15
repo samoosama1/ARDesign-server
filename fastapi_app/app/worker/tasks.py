@@ -27,10 +27,10 @@ from app.worker.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 # Extensions that the converter accepts
-MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb"}
+MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb", ".fbx"}
 
 # Docker image that contains /app/converter/main.py and xvfb-run
-CONVERTER_IMAGE = "youndria/arpatent:1.1"
+CONVERTER_IMAGE = "youndria/arpatent:1.2"
 
 
 def _find_model_file_in_zip(zip_abs_path: str) -> str:

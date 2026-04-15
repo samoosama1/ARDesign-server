@@ -40,6 +40,7 @@ MODEL_EXTENSIONS: dict[str, str] = {
     ".stp": "STP",
     ".iges": "IGES",
     ".glb": "GLB",
+    ".fbx": "FBX",
 }
 
 
@@ -178,10 +179,12 @@ async def list_patents(
 async def serve_model(
     patent_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ):
-    """Stream the converted GLB file. Only available when status=CONVERTED."""
-    patent = await _get_owned_patent(patent_id, current_user, db)
+    """Stream the converted GLB file. Public endpoint (no auth) so that
+    QR-code scans from the mobile app can fetch models directly."""
+    patent = await db.get(Patent, patent_id)
+    if not patent:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patent not found.")
 
     if patent.conversion_status != ConversionStatus.CONVERTED:
         raise HTTPException(
