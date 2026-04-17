@@ -9,6 +9,7 @@ List         : GET  /patents/             -> all patents ordered by upload date
 Delete       : DELETE /patents/{id}       -> delete patent and files
 """
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 
@@ -42,6 +43,12 @@ MODEL_EXTENSIONS: dict[str, str] = {
     ".glb": "GLB",
     ".fbx": "FBX",
 }
+
+
+def _sanitize_filename(name: str) -> str:
+    """Strip to alphanumeric, dash, underscore, dot. Replace spaces with underscores."""
+    name = name.replace(" ", "_")
+    return re.sub(r'[^\w\-.]', '', name)
 
 
 async def _get_owned_patent(patent_id: int, user: User, db: AsyncSession) -> Patent:
@@ -78,7 +85,8 @@ async def upload_patent(
 
     # -- Persist ZIP to disk ---------------------------------------------------
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    zip_rel = f"uploads/user_{current_user.id}/{timestamp}_{file.filename}"
+    safe_name = _sanitize_filename(file.filename)
+    zip_rel = f"uploads/user_{current_user.id}/{timestamp}_{safe_name}"
     zip_abs = os.path.join(settings.media_root, zip_rel)
 
     os.makedirs(os.path.dirname(zip_abs), exist_ok=True)

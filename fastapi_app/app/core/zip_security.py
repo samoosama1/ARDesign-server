@@ -7,6 +7,7 @@ size/ratio limits, model file identification, and MIME type validation.
 import io
 import logging
 import os
+import re
 import stat
 import zipfile
 
@@ -45,6 +46,12 @@ ALLOWED_MIME_TYPES = {
     "application/sla",                  # STL alternate
     "application/vnd.ms-pki.stl",       # STL alternate (Windows)
 }
+
+
+# Only allow filenames with safe characters — alphanumeric, dash, underscore,
+# dot, forward slash (for subdirectories), and space.
+# Rejects shell metacharacters ($, `, ;, |, &, (, ), etc.) as defense-in-depth.
+_SAFE_FILENAME_RE = re.compile(r'^[\w\s\-./]+$')
 
 
 def _reject(detail: str) -> HTTPException:
@@ -103,6 +110,11 @@ def validate_zip_upload(content: bytes, filename: str) -> tuple[str, str]:
                 if ".." in info.filename or info.filename.startswith("/"):
                     logger.warning("ZIP rejected: path traversal in entry '%s'", info.filename)
                     raise _reject("ZIP contains path traversal attack.")
+
+                # Filename character check (rejects shell metacharacters)
+                if not _SAFE_FILENAME_RE.match(info.filename.rstrip("/")):
+                    logger.warning("ZIP rejected: unsafe characters in entry '%s'", info.filename)
+                    raise _reject("ZIP contains filenames with invalid characters.")
 
                 # Per-file size check
                 if info.file_size > MAX_FILE_SIZE:
