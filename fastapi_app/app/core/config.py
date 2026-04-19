@@ -2,6 +2,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # --- app metadata ---
+    # Set by Compose from .env so the image tag stays in sync with the env.
+    # Not used by the app — declared here so pydantic's extras=forbid passes.
+    app_version: str = ""
+
     # --- database ---
     postgres_user: str = "myuser"
     postgres_password: str  # required — must come from .env
