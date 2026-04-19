@@ -25,5 +25,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN groupadd --system --gid 1000 app \
+ && useradd  --system --uid 1000 --gid app --shell /usr/sbin/nologin app \
+ && mkdir -p /app/media \
+ && chown -R app:app /app
+
+USER app
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app

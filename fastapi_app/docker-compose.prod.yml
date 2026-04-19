@@ -1,4 +1,4 @@
-name: arpatent
+name: arpatent-prod
 
 services:
 
@@ -33,7 +33,7 @@ services:
 
   # -- FastAPI ------------------------------------------------------------------
   api:
-    build: .
+    image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     volumes:
@@ -50,28 +50,79 @@ services:
       MEDIA_ROOT: /app/media
     networks:
       - app-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
 
   # -- Celery worker ------------------------------------------------------------
   worker:
-    build: .
+    image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_worker
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
     volumes:
       - media_data:/app/media
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      socket-proxy:
+        condition: service_started
     env_file: .env
     environment:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379/0
       MEDIA_ROOT: /app/media
-      MEDIA_VOLUME_NAME: arpatent_media_data
+      MEDIA_VOLUME_NAME: arpatent-prod_media_data
+      DOCKER_HOST: tcp://socket-proxy:2375
     networks:
       - app-net
+      - proxy-net
+
+  # -- Docker socket proxy ------------------------------------------------------
+  # Mediates the worker's Docker API calls so the raw socket is never exposed
+  # to the celery process. Whitelists /containers/* only.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    container_name: arpatent_socket_proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy-net
+    # No read_only: the image regenerates haproxy.cfg from a baked-in template
+    # at /usr/local/etc/haproxy/ on every start, so that dir must be writable
+    # and can't be a tmpfs (which would mask the template). Blast radius is
+    # bounded by cap_drop + no-new-privileges + internal proxy-net + the
+    # narrow CONTAINERS=1 POST=1 API surface below.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+
+  # -- Frontend build (one-shot) ------------------------------------------------
+  # Builds the React SPA and drops dist/ into the frontend_dist volume that
+  # nginx serves. Runs once per `up` and exits; nginx waits for it to finish.
+  # To rebuild after source changes: `up -d --build frontend-builder`.
+  frontend-builder:
+    build:
+      context: ./frontend
+    container_name: arpatent_frontend_builder
+    command: sh -c "rm -rf /dst/* && cp -r /app/dist/. /dst/"
+    volumes:
+      - frontend_dist:/dst
+    restart: "no"
 
   # -- Nginx reverse proxy ------------------------------------------------------
   nginx:
@@ -86,7 +137,10 @@ services:
       - certbot_www:/var/www/certbot:ro
       - certbot_conf:/etc/letsencrypt:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      frontend-builder:
+        condition: service_completed_successfully
     networks:
       - app-net
 
@@ -107,3 +161,5 @@ volumes:
 
 networks:
   app-net:
+  proxy-net:
+    internal: true
