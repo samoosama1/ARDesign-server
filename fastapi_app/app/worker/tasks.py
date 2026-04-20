@@ -40,7 +40,7 @@ CONVERTER_IMAGE = "youndria/arpatent:1.2"
 # Resource limits for the ephemeral converter container
 CONTAINER_MEMORY = "2g"
 CONTAINER_CPUS = "1.5"
-CONTAINER_PIDS = "100"
+CONTAINER_PIDS = "512"
 CONTAINER_TIMEOUT = 600  # seconds
 
 # ---------------------------------------------------------------------------
