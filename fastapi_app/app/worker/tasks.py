@@ -174,6 +174,7 @@ def convert_patent_task(self, patent_id: int) -> None:
         if result.returncode != 0:
             raise RuntimeError(
                 f"Converter exited {result.returncode}.\n"
+                f"stdout: {result.stdout[-1000:]}\n"
                 f"stderr: {result.stderr[-1000:]}"
             )
 
