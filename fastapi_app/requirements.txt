@@ -12,3 +12,5 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-magic==0.4.27
 alembic==1.14.1
+requests==2.32.3
+Pillow==11.0.0

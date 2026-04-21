@@ -82,6 +82,32 @@ services:
       - app-net
       - proxy-net
 
+  # -- Celery generator (GPU-bound Hunyuan3D tasks, concurrency=1) --------------
+  # GPU serializes to one generation at a time; this worker is pinned to
+  # concurrency=1 on the dedicated "generate" queue. No Docker socket needed
+  # (it only makes HTTP calls to the host-native Hunyuan API server).
+  generator:
+    image: arpatent-api:${APP_VERSION:-latest}
+    container_name: arpatent_generator
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q generate
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      MEDIA_ROOT: /app/media
+      HUNYUAN_BASE_URL: http://host.docker.internal:8081
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
+
   # -- Docker socket proxy ------------------------------------------------------
   # Mediates the worker's Docker API calls so the raw socket is never exposed
   # to the celery process. Whitelists /containers/* only.

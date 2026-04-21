@@ -1,28 +1,27 @@
 """
-Celery tasks for 3D model conversion.
+Celery tasks for 3D model conversion and generation.
 
-Flow per task:
-  1. Mark patent IN_PROCESSING
-  2. Inspect the stored ZIP to find the model filename
-  3. Create a disposable Docker container (youndria/arpatent:1.2) via DooD
-     - NO volume mounts — converter has zero access to persistent storage
-     - ZIP is copied IN via `docker cp` before start
-     - Container extracts ZIP and runs the converter internally
-     - GLB is copied OUT via `docker cp` after the container exits
-     - Container is force-removed in a finally block
-  4. On success -> mark CONVERTED, store glb_file_path
-  5. On any error -> mark FAILED, store error message
+Two independent flows:
 
-Security: user-controlled data (filenames from ZIP) is NEVER interpolated into
-shell script strings. It is passed as a positional argument ($1) to `bash -c`,
-which prevents command injection.
+convert_patent_task (queue: convert, concurrency=2)
+  Takes an uploaded ZIP, runs it through the ephemeral youndria/arpatent:1.2
+  container via DooD, produces a GLB. See convert_patent_task docstring.
+
+generate_from_image_task (queue: generate, concurrency=1)
+  Takes one-or-more view images already on the media volume, posts them to
+  the host-native Hunyuan3D API server, writes the returned GLB back to the
+  media volume. Serialized at the queue level because a single GPU cannot
+  run two generations in parallel.
 """
+import base64
 import logging
 import os
 import subprocess
 import uuid
 import zipfile
 from datetime import datetime, timezone
+
+import requests
 
 from app.core.config import settings
 from app.db.sync_session import SyncSessionLocal
@@ -219,4 +218,122 @@ def convert_patent_task(self, patent_id: int) -> None:
     finally:
         # Always remove the container, even on failure/timeout
         _docker(["docker", "rm", "-f", container_name])
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Image-to-3D generation via Hunyuan3D-2
+# ---------------------------------------------------------------------------
+
+# Inference defaults — mirror examples/textured_shape_gen_multiview.py.
+# Individual requests can override via the `gen_overrides` task arg.
+GEN_DEFAULTS: dict = {
+    "texture": True,
+    "num_inference_steps": 50,
+    "octree_resolution": 380,
+    "num_chunks": 20000,
+    "type": "glb",
+}
+
+HUNYUAN_CONNECT_TIMEOUT = 30  # seconds to establish the TCP connection
+
+
+def _load_image_b64(abs_path: str) -> str:
+    with open(abs_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("ascii")
+
+
+@celery_app.task(bind=True, max_retries=0, name="generate_from_image")
+def generate_from_image_task(self, patent_id: int) -> None:
+    """
+    Generate a GLB from one-or-more view images via the host-native Hunyuan3D
+    API server. Uses /generate (sync) so errors surface immediately as HTTP 404
+    with a descriptive body — /send swallows worker-thread errors silently.
+
+    Preconditions on the Patent row:
+      - file_type == IMAGE
+      - storage_path points to the directory containing the view images
+      - related_files is a dict mapping view label -> filename
+        (e.g. {"front": "front.png", "left": "left.png"})
+    """
+    db = SyncSessionLocal()
+    patent: Patent | None = None
+
+    try:
+        patent = db.get(Patent, patent_id)
+        if not patent:
+            logger.error("generate_from_image_task: patent %d not found", patent_id)
+            return
+
+        # -- 1. Mark in-flight ------------------------------------------------
+        patent.conversion_status = ConversionStatus.IN_PROCESSING
+        patent.conversion_error = None
+        db.commit()
+
+        # -- 2. Load views and build multi-view payload -----------------------
+        if not patent.storage_path or not isinstance(patent.related_files, dict):
+            raise RuntimeError(
+                "patent missing image set (storage_path/related_files)"
+            )
+
+        storage_abs = os.path.join(settings.media_root, patent.storage_path)
+        images_b64: dict[str, str] = {}
+        for view_name, filename in patent.related_files.items():
+            img_path = os.path.join(storage_abs, filename)
+            if not os.path.isfile(img_path):
+                raise FileNotFoundError(f"missing view image: {img_path}")
+            images_b64[view_name] = _load_image_b64(img_path)
+
+        payload = {"images": images_b64, **GEN_DEFAULTS}
+
+        # -- 3. Call Hunyuan /generate (sync, returns GLB bytes) --------------
+        base_url = settings.hunyuan_base_url.rstrip("/")
+        logger.info(
+            "Patent %d: POST %s/generate with %d view(s): %s",
+            patent_id, base_url, len(images_b64), list(images_b64.keys()),
+        )
+        resp = requests.post(
+            f"{base_url}/generate",
+            json=payload,
+            timeout=(HUNYUAN_CONNECT_TIMEOUT, settings.hunyuan_total_timeout),
+        )
+
+        if resp.status_code == 200:
+            glb_bytes = resp.content
+        elif resp.status_code == 404:
+            # Hunyuan's error convention: any failure returns 404 with
+            # {"text": "<message>", "error_code": 1}. Not a missing endpoint.
+            try:
+                detail = resp.json().get("text", resp.text[:500])
+            except ValueError:
+                detail = resp.text[:500]
+            raise RuntimeError(f"Hunyuan generation failed: {detail}")
+        else:
+            resp.raise_for_status()
+
+        if not glb_bytes:
+            raise RuntimeError("Hunyuan returned empty response body")
+
+        # -- 4. Persist GLB on the media volume -------------------------------
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        stem = patent.model_filename or f"generated_{patent.id}"
+        glb_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}/out.glb"
+        glb_abs = os.path.join(settings.media_root, glb_rel)
+        os.makedirs(os.path.dirname(glb_abs), exist_ok=True)
+        with open(glb_abs, "wb") as f:
+            f.write(glb_bytes)
+
+        # -- 5. Success -------------------------------------------------------
+        patent.glb_file_path = glb_rel
+        patent.conversion_status = ConversionStatus.CONVERTED
+        db.commit()
+        logger.info("Patent %d generated successfully -> %s", patent_id, glb_rel)
+
+    except Exception as exc:
+        logger.exception("Generation failed for patent %d", patent_id)
+        if patent:
+            patent.conversion_status = ConversionStatus.FAILED
+            patent.conversion_error = str(exc)[:2000]
+            db.commit()
+    finally:
         db.close()

@@ -6,3 +6,4 @@ out.txt
 /backend
 /fastapi_app/frontend/.vite
 .env
+.research

@@ -18,3 +18,11 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 )
+
+# Route GPU-bound generation to its own queue. The `generator` service
+# listens on this queue with --concurrency=1, serializing access to the
+# single Hunyuan3D instance (one GPU, can't run two generations in parallel).
+# Everything else stays on the default "celery" queue.
+celery_app.conf.task_routes = {
+    "generate_from_image": {"queue": "generate"},
+}

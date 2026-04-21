@@ -13,7 +13,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user
 from app.core.config import settings
+from app.core.image_security import ALLOWED_MIMES as IMAGE_ALLOWED_MIMES, validate_and_reencode
 from app.core.zip_security import validate_zip_upload
 from app.db.session import get_db
 from app.models.patent import ConversionStatus, FileType, Patent
@@ -31,7 +32,7 @@ from app.schemas.patent import (
     PatentStatusResponse,
     PatentUploadResponse,
 )
-from app.worker.tasks import convert_patent_task
+from app.worker.tasks import convert_patent_task, generate_from_image_task
 
 router = APIRouter(prefix="/patents", tags=["patents"])
 
@@ -109,6 +110,83 @@ async def upload_patent(
         patent_id=patent.id,
         status=patent.conversion_status,
         message="Upload successful. POST /patents/{id}/convert to start conversion.",
+    )
+
+
+# -- Generate from image(s) ----------------------------------------------------
+
+@router.post(
+    "/generate",
+    response_model=PatentUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_from_images(
+    front: UploadFile = File(..., description="Front view (required)"),
+    left: UploadFile | None = File(None, description="Left view (optional)"),
+    right: UploadFile | None = File(None, description="Right view (optional)"),
+    back: UploadFile | None = File(None, description="Back view (optional)"),
+    title: str | None = Form(None, description="Optional name for the generated model"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Upload 1-4 view images. Validated, re-encoded to PNG, stored, and handed
+    off to the `generate` Celery queue which routes to the host-native
+    Hunyuan3D service. Returns 202 with IN_PROCESSING status; poll /status
+    or /list for progress, then /model when CONVERTED.
+
+    The Hunyuan3D-2mv model was trained on front/left/back — 'right' is
+    accepted but may be ignored or degrade quality.
+    """
+    uploads_by_view = {"front": front, "left": left, "right": right, "back": back}
+    uploads_by_view = {k: v for k, v in uploads_by_view.items() if v is not None}
+
+    # Validate + re-encode each view up-front so we fail before writing anything.
+    validated: dict[str, bytes] = {}
+    for view_name, upload in uploads_by_view.items():
+        if upload.content_type not in IMAGE_ALLOWED_MIMES:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"'{view_name}' must be PNG, JPEG, or WebP (got {upload.content_type}).",
+            )
+        content = await upload.read()
+        validated[view_name] = validate_and_reencode(content, view_name)
+
+    # Persist to disk
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stem_raw = title.strip() if title else f"generated_{timestamp}"
+    stem = _sanitize_filename(stem_raw) or f"generated_{timestamp}"
+    storage_rel = f"uploads/user_{current_user.id}/{timestamp}_image_gen_{stem}"
+    storage_abs = os.path.join(settings.media_root, storage_rel)
+    os.makedirs(storage_abs, exist_ok=True)
+
+    related: dict[str, str] = {}
+    for view_name, png_bytes in validated.items():
+        filename = f"{view_name}.png"
+        with open(os.path.join(storage_abs, filename), "wb") as f:
+            f.write(png_bytes)
+        related[view_name] = filename
+
+    # Create the Patent row already marked IN_PROCESSING — generation begins
+    # immediately, unlike the ZIP flow where the user manually triggers convert.
+    patent = Patent(
+        user_id=current_user.id,
+        file_type=FileType.IMAGE,
+        model_filename=stem,
+        storage_path=storage_rel,
+        related_files=related,
+        conversion_status=ConversionStatus.IN_PROCESSING,
+    )
+    db.add(patent)
+    await db.commit()
+    await db.refresh(patent)
+
+    generate_from_image_task.delay(patent.id)
+
+    return PatentUploadResponse(
+        patent_id=patent.id,
+        status=patent.conversion_status,
+        message=f"Generation started with {len(validated)} view(s).",
     )
 
 

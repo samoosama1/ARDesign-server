@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import DateTime, Enum, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,6 +18,7 @@ class FileType(str, enum.Enum):
     IGES = "IGES"
     GLB = "GLB"
     FBX = "FBX"
+    IMAGE = "IMAGE"   # source was one or more 2D images, generated via Hunyuan3D
 
 
 class ConversionStatus(str, enum.Enum):
@@ -55,8 +56,10 @@ class Patent(Base):
     storage_path: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, doc="Folder containing extracted model files"
     )
-    related_files: Mapped[Optional[List[str]]] = mapped_column(
-        JSON, nullable=True, doc="Paths to all extracted files (OBJ, MTL, textures, …)"
+    # ZIP flow: list[str] of extracted files (OBJ, MTL, textures…).
+    # Image-gen flow: dict[str, str] mapping view label -> stored filename.
+    related_files: Mapped[Optional[Any]] = mapped_column(
+        JSON, nullable=True, doc="Extracted file list (ZIP) or view map (image-gen)"
     )
     glb_file_path: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, doc="Relative path to the converted GLB file"

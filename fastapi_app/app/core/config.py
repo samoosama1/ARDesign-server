@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     media_root: str = "/app/media"
     media_volume_name: str = "arpatent_media_data"
 
+    # --- Hunyuan3D image-to-3D service ---
+    # Host-native API server (patched api_server.py). Worker reaches it via
+    # the Docker host-gateway alias on Linux.
+    hunyuan_base_url: str = "http://host.docker.internal:8081"
+    hunyuan_total_timeout: int = 900   # seconds — overall wall clock cap per generation
+
     # --- JWT ---
     jwt_secret_key: str  # required — must come from .env
     jwt_algorithm: str = "HS256"
