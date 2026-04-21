@@ -244,7 +244,9 @@ def _load_image_b64(abs_path: str) -> str:
 
 
 @celery_app.task(bind=True, max_retries=0, name="generate_from_image")
-def generate_from_image_task(self, patent_id: int) -> None:
+def generate_from_image_task(
+    self, patent_id: int, gen_overrides: dict | None = None
+) -> None:
     """
     Generate a GLB from one-or-more view images via the host-native Hunyuan3D
     API server. Uses /generate (sync) so errors surface immediately as HTTP 404
@@ -255,6 +257,10 @@ def generate_from_image_task(self, patent_id: int) -> None:
       - storage_path points to the directory containing the view images
       - related_files is a dict mapping view label -> filename
         (e.g. {"front": "front.png", "left": "left.png"})
+
+    `gen_overrides` is an optional dict merged on top of GEN_DEFAULTS — used by
+    the /generate endpoint to plumb UI presets (quality, detail) into pipeline
+    params (num_inference_steps, octree_resolution).
     """
     db = SyncSessionLocal()
     patent: Patent | None = None
@@ -284,7 +290,7 @@ def generate_from_image_task(self, patent_id: int) -> None:
                 raise FileNotFoundError(f"missing view image: {img_path}")
             images_b64[view_name] = _load_image_b64(img_path)
 
-        payload = {"images": images_b64, **GEN_DEFAULTS}
+        payload = {"images": images_b64, **GEN_DEFAULTS, **(gen_overrides or {})}
 
         # -- 3. Call Hunyuan /generate (sync, returns GLB bytes) --------------
         base_url = settings.hunyuan_base_url.rstrip("/")

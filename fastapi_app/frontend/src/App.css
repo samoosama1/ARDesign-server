@@ -412,6 +412,66 @@ header h1 { font-size: 1.5rem; }
 .mv-title-row button:disabled { opacity: 0.6; cursor: not-allowed; }
 .mv-title-row button:hover:not(:disabled) { background: #1d4ed8; }
 
+/* ── Preset chips (Quality / Detail) ──────────────────── */
+
+.mv-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .mv-presets { grid-template-columns: 1fr; }
+}
+
+.mv-preset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mv-preset-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mv-preset-options {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.mv-preset-chip {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: center;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mv-preset-chip:hover { border-color: #2563eb; }
+
+.mv-preset-chip.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.mv-preset-chip input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ── 3D viewer modal ──────────────────────────────────── */
 
 .viewer-modal {

@@ -45,6 +45,11 @@ MODEL_EXTENSIONS: dict[str, str] = {
     ".fbx": "FBX",
 }
 
+# Hunyuan3D inference presets — mirror gradio_app.py's Generation Mode and
+# Decoding Mode radios so users get the same intuitive choices.
+QUALITY_PRESETS: dict[str, int] = {"turbo": 5, "fast": 10, "standard": 30}
+DETAIL_PRESETS: dict[str, int] = {"low": 196, "standard": 256, "high": 384}
+
 
 def _sanitize_filename(name: str) -> str:
     """Strip to alphanumeric, dash, underscore, dot. Replace spaces with underscores."""
@@ -126,6 +131,8 @@ async def generate_from_images(
     right: UploadFile | None = File(None, description="Right view (optional)"),
     back: UploadFile | None = File(None, description="Back view (optional)"),
     title: str | None = Form(None, description="Optional name for the generated model"),
+    quality: str | None = Form(None, description="Quality preset: turbo|fast|standard"),
+    detail: str | None = Form(None, description="Detail preset: low|standard|high"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -138,6 +145,23 @@ async def generate_from_images(
     The Hunyuan3D-2mv model was trained on front/left/back — 'right' is
     accepted but may be ignored or degrade quality.
     """
+    # Resolve presets up-front so we fail fast on bad input.
+    overrides: dict = {}
+    if quality is not None:
+        if quality not in QUALITY_PRESETS:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"quality must be one of {list(QUALITY_PRESETS)}",
+            )
+        overrides["num_inference_steps"] = QUALITY_PRESETS[quality]
+    if detail is not None:
+        if detail not in DETAIL_PRESETS:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"detail must be one of {list(DETAIL_PRESETS)}",
+            )
+        overrides["octree_resolution"] = DETAIL_PRESETS[detail]
+
     uploads_by_view = {"front": front, "left": left, "right": right, "back": back}
     uploads_by_view = {k: v for k, v in uploads_by_view.items() if v is not None}
 
@@ -181,7 +205,7 @@ async def generate_from_images(
     await db.commit()
     await db.refresh(patent)
 
-    generate_from_image_task.delay(patent.id)
+    generate_from_image_task.delay(patent.id, overrides or None)
 
     return PatentUploadResponse(
         patent_id=patent.id,

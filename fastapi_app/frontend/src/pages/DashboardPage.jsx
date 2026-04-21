@@ -6,6 +6,19 @@ import ActionButton from '../components/ActionButton'
 
 const VIEWS = ['front', 'left', 'right', 'back']
 
+// Mirrors QUALITY_PRESETS and DETAIL_PRESETS in the backend. The backend is
+// source of truth for the numeric values; here we only need the labels.
+const QUALITY_OPTIONS = [
+  { value: 'turbo', label: 'Turbo', hint: 'fastest, lower quality' },
+  { value: 'fast', label: 'Fast', hint: 'balanced' },
+  { value: 'standard', label: 'Standard', hint: 'best quality, slowest' },
+]
+const DETAIL_OPTIONS = [
+  { value: 'low', label: 'Low', hint: 'coarse mesh' },
+  { value: 'standard', label: 'Standard', hint: 'default' },
+  { value: 'high', label: 'High', hint: 'finer detail' },
+]
+
 // Polling windows (2s tick).
 // ZIP conversion: ~2 min. Image generation: ~15 min (GPU-bound, queued behind other jobs).
 const POLL_TICKS_CONVERT = 60
@@ -25,6 +38,11 @@ export default function DashboardPage() {
   // Image generate
   const [views, setViews] = useState({}) // { front: File, left: File, ... }
   const [genTitle, setGenTitle] = useState('')
+  // Defaults map to the strongest option in each group: Quality peaks at
+  // 'standard' (30 steps), Detail peaks at 'high' (384 octree). The labels
+  // come from gradio upstream and are inconsistent on purpose — keep them.
+  const [quality, setQuality] = useState('standard')
+  const [detail, setDetail] = useState('high')
 
   // One object URL per selected File; revoked when the file is replaced/cleared.
   const previews = useMemo(() => {
@@ -141,6 +159,8 @@ export default function DashboardPage() {
         if (views[v]) form.append(v, views[v])
       })
       if (genTitle.trim()) form.append('title', genTitle.trim())
+      form.append('quality', quality)
+      form.append('detail', detail)
 
       const res = await apiFetch('/api/patents/generate', { method: 'POST', body: form })
       if (!res.ok) {
@@ -286,6 +306,51 @@ export default function DashboardPage() {
                 )
               })}
             </div>
+            <div className="mv-presets">
+              <div className="mv-preset-group">
+                <span className="mv-preset-label">Quality</span>
+                <div className="mv-preset-options">
+                  {QUALITY_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`mv-preset-chip ${quality === opt.value ? 'active' : ''}`}
+                      title={opt.hint}
+                    >
+                      <input
+                        type="radio"
+                        name="quality"
+                        value={opt.value}
+                        checked={quality === opt.value}
+                        onChange={() => setQuality(opt.value)}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="mv-preset-group">
+                <span className="mv-preset-label">Detail</span>
+                <div className="mv-preset-options">
+                  {DETAIL_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`mv-preset-chip ${detail === opt.value ? 'active' : ''}`}
+                      title={opt.hint}
+                    >
+                      <input
+                        type="radio"
+                        name="detail"
+                        value={opt.value}
+                        checked={detail === opt.value}
+                        onChange={() => setDetail(opt.value)}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="mv-title-row">
               <input
                 type="text"
