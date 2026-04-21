@@ -61,14 +61,28 @@ _EXTRACT = (
 # $1 = absolute path to the model file inside /tmp/work.
 # FBX converter does os.chdir(/app/converter/) so out.glb may land there;
 # we try /tmp/work first, fall back to /app/converter/.
+#
+# We do NOT chain the converter command with && : the FBX path uses bpy,
+# which finishes writing out.glb successfully and then SIGSEGVs during
+# Python interpreter shutdown because the surrounding container is being
+# torn down at the same time. The crash is cosmetic — the GLB is already
+# on disk. We check for the file itself, ignoring Python's exit code, so
+# those shutdown crashes don't discard real conversions.
 CONVERT_SCRIPT = (
-    f"{_EXTRACT} && "
-    "cd /tmp/work && "
+    "set -e\n"
+    f"{_EXTRACT}\n"
+    "cd /tmp/work\n"
+    "set +e\n"
     "xvfb-run -a /app/converter/venv/bin/python3.11 "
-    '/app/converter/main.py "$1" && '
-    "mkdir -p /output && "
-    "(cp /tmp/work/out.glb /output/out.glb 2>/dev/null || "
-    "cp /app/converter/out.glb /output/out.glb)"
+    '/app/converter/main.py "$1"\n'
+    "PYCODE=$?\n"
+    "mkdir -p /output\n"
+    "if [ -f /tmp/work/out.glb ]; then "
+    "cp /tmp/work/out.glb /output/out.glb; exit 0; fi\n"
+    "if [ -f /app/converter/out.glb ]; then "
+    "cp /app/converter/out.glb /output/out.glb; exit 0; fi\n"
+    'echo "Converter produced no out.glb (python exited $PYCODE)" >&2\n'
+    "exit ${PYCODE:-1}\n"
 )
 
 # For GLB passthrough — no conversion needed, just copy.
