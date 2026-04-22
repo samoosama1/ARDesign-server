@@ -62,7 +62,7 @@ services:
   worker:
     build: .
     container_name: arpatent_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
     user: "1000:1000"
     volumes:
       - media_data:/app/media

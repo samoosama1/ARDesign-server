@@ -61,7 +61,7 @@ services:
   worker:
     image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_worker
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
     volumes:
       - media_data:/app/media
     depends_on:
