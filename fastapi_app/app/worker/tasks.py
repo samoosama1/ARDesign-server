@@ -37,7 +37,7 @@ MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb", ".fbx"}
 CONVERTER_IMAGE = "youndria/arpatent:1.2"
 
 # Resource limits for the ephemeral converter container
-CONTAINER_MEMORY = "6g"
+CONTAINER_MEMORY = "12g"
 CONTAINER_CPUS = "1.5"
 CONTAINER_PIDS = "512"
 CONTAINER_TIMEOUT = 600  # seconds
