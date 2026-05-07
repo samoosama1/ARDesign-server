@@ -1,11 +1,21 @@
 name: arpatent-prod
 
+# Shared docker log driver config — caps each container's json-file log at
+# 30MB (10MB × 3 files) instead of unbounded growth that can fill the host
+# disk and wedge writes across the daemon.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   # -- PostgreSQL ---------------------------------------------------------------
   db:
     image: postgres:15
     container_name: arpatent_db
+    restart: unless-stopped
     env_file: .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -19,23 +29,45 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       retries: 10
+    mem_limit: 2g
+    pids_limit: 512
+    logging: *default-logging
 
   # -- Redis --------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: arpatent_redis
+    restart: unless-stopped
     networks:
       - app-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
+    mem_limit: 512m
+    pids_limit: 128
+    logging: *default-logging
 
   # -- FastAPI ------------------------------------------------------------------
   api:
     image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    # Gunicorn supervises uvicorn workers. --max-requests recycles each worker
+    # after ~1000 requests (jittered) to bound memory leaks. --graceful-timeout
+    # caps how long workers can hold up shutdown.
+    command: >
+      gunicorn app.main:app
+      --bind 0.0.0.0:8000
+      -k uvicorn.workers.UvicornWorker
+      -w 4
+      --max-requests 1000
+      --max-requests-jitter 50
+      --graceful-timeout 10
+      --timeout 60
+      --access-logfile -
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
     volumes:
       - media_data:/app/media
     depends_on:
@@ -56,12 +88,21 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+    mem_limit: 1g
+    pids_limit: 256
+    logging: *default-logging
 
   # -- Celery worker ------------------------------------------------------------
   worker:
     image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_worker
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
+    init: true
+    restart: unless-stopped
+    # 30s grace: with task_acks_late=True an in-flight conversion redelivers,
+    # and the worker_process_init handler in celery_app.py prunes the
+    # orphaned converter container on the next worker startup.
+    stop_grace_period: 30s
     volumes:
       - media_data:/app/media
     depends_on:
@@ -81,6 +122,9 @@ services:
     networks:
       - app-net
       - proxy-net
+    mem_limit: 512m
+    pids_limit: 256
+    logging: *default-logging
 
   # -- Celery generator (GPU-bound Hunyuan3D tasks, concurrency=1) --------------
   # GPU serializes to one generation at a time; this worker is pinned to
@@ -90,6 +134,9 @@ services:
     image: arpatent-api:${APP_VERSION:-latest}
     container_name: arpatent_generator
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q generate
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
     volumes:
       - media_data:/app/media
     depends_on:
@@ -107,6 +154,9 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - app-net
+    mem_limit: 1g
+    pids_limit: 256
+    logging: *default-logging
 
   # -- Docker socket proxy ------------------------------------------------------
   # Mediates the worker's Docker API calls so the raw socket is never exposed
@@ -136,6 +186,9 @@ services:
       - SETUID
       - SETGID
       - NET_BIND_SERVICE
+    mem_limit: 64m
+    pids_limit: 64
+    logging: *default-logging
 
   # -- Frontend build (one-shot) ------------------------------------------------
   # Builds the React SPA and drops dist/ into the frontend_dist volume that
@@ -149,11 +202,13 @@ services:
     volumes:
       - frontend_dist:/dst
     restart: "no"
+    logging: *default-logging
 
   # -- Nginx reverse proxy ------------------------------------------------------
   nginx:
     image: nginx:alpine
     container_name: arpatent_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -169,6 +224,9 @@ services:
         condition: service_completed_successfully
     networks:
       - app-net
+    mem_limit: 256m
+    pids_limit: 64
+    logging: *default-logging
 
   # -- Certbot (SSL) ------------------------------------------------------------
   certbot:
@@ -177,6 +235,7 @@ services:
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
+    logging: *default-logging
 
 volumes:
   postgres_data:

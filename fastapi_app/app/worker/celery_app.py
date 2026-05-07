@@ -1,5 +1,12 @@
+import logging
+import subprocess
+
 from celery import Celery
+from celery.signals import worker_process_init
+
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 celery_app = Celery(
     "arpatent_worker",
@@ -17,6 +24,9 @@ celery_app.conf.update(
     # Prevent tasks from being silently lost if the worker crashes mid-task
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # Recycle the worker process every 50 tasks. Bounds memory/fd leaks that
+    # accumulate from subprocess.run() and the docker CLI shellouts in tasks.py.
+    worker_max_tasks_per_child=50,
 )
 
 # Route GPU-bound generation to its own queue. The `generator` service
@@ -26,3 +36,35 @@ celery_app.conf.update(
 celery_app.conf.task_routes = {
     "generate_from_image": {"queue": "generate"},
 }
+
+
+@worker_process_init.connect
+def _prune_orphan_converters(**_kwargs):
+    """Sweep converter containers left over from a previous worker crash.
+
+    If the worker is SIGKILLed mid-task (e.g. docker compose down beyond
+    stop_grace_period), tasks.py's finally block can't run docker rm -f and
+    the spawned youndria/arpatent container is orphaned. This handler runs
+    at every worker process start (boot + max_tasks_per_child recycles) and
+    prunes them. Safe with --concurrency=1: no other task is running on this
+    container at the moment the signal fires.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-aq",
+             "--filter", "ancestor=youndria/arpatent:1.2"],
+            capture_output=True, text=True, check=True, timeout=10,
+        )
+        ids = [s for s in result.stdout.splitlines() if s.strip()]
+        if not ids:
+            return
+        logger.info("Pruning %d orphan converter container(s): %s",
+                    len(ids), ids)
+        subprocess.run(
+            ["docker", "rm", "-f", *ids],
+            capture_output=True, check=False, timeout=30,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        # Non-fatal: don't block worker startup if docker CLI / socket-proxy
+        # is unavailable. Worst case is one more session of accumulation.
+        logger.warning("Orphan converter cleanup failed: %s", e)
