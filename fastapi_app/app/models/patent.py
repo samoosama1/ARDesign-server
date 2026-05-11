@@ -23,7 +23,8 @@ class FileType(str, enum.Enum):
 
 class ConversionStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"           # ZIP stored, awaiting user-triggered conversion
-    IN_PROCESSING = "IN_PROCESSING" # Celery task dispatched, container running
+    QUEUED = "QUEUED"               # Celery task enqueued, waiting for a worker
+    IN_PROCESSING = "IN_PROCESSING" # Worker picked it up; container/Hunyuan running
     CONVERTED = "CONVERTED"         # GLB ready
     FAILED = "FAILED"               # Conversion failed
 
