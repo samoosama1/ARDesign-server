@@ -132,8 +132,12 @@ def convert_patent_task(self, patent_id: int) -> None:
         model_ext = os.path.splitext(model_in_zip)[1].lower()
 
         # -- 3. Build output path on the worker's media volume -------------------
+        # Use the design name (already filesystem-sanitized at upload time) so
+        # the on-disk path mirrors what the user sees in the UI. Fall back to
+        # the in-zip stem for legacy patents created before the registration
+        # form existed.
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        stem = os.path.splitext(os.path.basename(model_in_zip))[0]
+        stem = patent.model_filename or os.path.splitext(os.path.basename(model_in_zip))[0]
         glb_dir_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}"
         glb_rel = f"{glb_dir_rel}/out.glb"
 
