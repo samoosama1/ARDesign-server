@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { useAuth } from '../hooks/useAuth'
 import { apiFetch } from '../api/client'
 import ActionButton from '../components/ActionButton'
+import RegistrationWizard from '../components/RegistrationWizard'
 
 const VIEWS = ['front', 'left', 'right', 'back']
 
@@ -28,12 +29,11 @@ export default function DashboardPage() {
   const { user, logout } = useAuth()
   const [patents, setPatents] = useState([])
   const [activeTab, setActiveTab] = useState('zip')
-  const [uploading, setUploading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState(null)
 
-  // ZIP upload
-  const fileRef = useRef()
+  // ZIP upload — now driven by the registration wizard modal
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   // Image generate
   const [views, setViews] = useState({}) // { front: File, left: File, ... }
@@ -107,32 +107,6 @@ export default function DashboardPage() {
       }
     }, 2000)
     pollRefs.current[patentId] = id
-  }
-
-  async function handleUpload(e) {
-    e.preventDefault()
-    setError(null)
-    const file = fileRef.current?.files[0]
-    if (!file) return
-
-    setUploading(true)
-    try {
-      const form = new FormData()
-      form.append('file', file)
-
-      const uploadRes = await apiFetch('/api/patents/upload', { method: 'POST', body: form })
-      if (!uploadRes.ok) {
-        const err = await uploadRes.json()
-        throw new Error(err.detail || 'Upload failed')
-      }
-
-      fileRef.current.value = ''
-      await fetchPatents()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setUploading(false)
-    }
   }
 
   function setViewFile(view, file) {
@@ -255,12 +229,19 @@ export default function DashboardPage() {
         </div>
 
         {activeTab === 'zip' && (
-          <form onSubmit={handleUpload}>
-            <input type="file" accept=".zip" ref={fileRef} required />
-            <button type="submit" disabled={uploading}>
-              {uploading ? 'Uploading...' : 'Upload ZIP'}
+          <div className="zip-launcher">
+            <p className="zip-launcher-hint">
+              Submit a design for registration: enter the design name and Locarno
+              classification, then upload its 3D model ZIP.
+            </p>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => { setError(null); setWizardOpen(true) }}
+            >
+              Register a design
             </button>
-          </form>
+          </div>
         )}
 
         {activeTab === 'image' && (
@@ -446,6 +427,12 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <RegistrationWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onComplete={fetchPatents}
+      />
     </div>
   )
 }

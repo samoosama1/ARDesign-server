@@ -45,7 +45,18 @@ class Patent(Base):
         Enum(FileType, name="filetype_enum"), nullable=True
     )
     model_filename: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, doc="Original model filename without extension"
+        String(255), nullable=True, doc="User-supplied design name (sanitized for filesystem use)"
+    )
+
+    # --- registration form (Locarno design classification) ---
+    # Stored as the string value of LocarnoMainClass/LocarnoSubclass enums; the
+    # full hierarchy lives in app/data/locarno.py (5009 entries — too many for a
+    # native Postgres enum, so we validate at the app layer).
+    locarno_main_class: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="", doc="LocarnoMainClass enum value (e.g. SINIF_1)"
+    )
+    locarno_subclass: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="", doc="LocarnoSubclass enum value"
     )
 
     # --- storage paths ---

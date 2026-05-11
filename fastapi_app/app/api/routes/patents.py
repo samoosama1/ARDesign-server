@@ -23,6 +23,7 @@ from app.api.deps import get_current_active_user
 from app.core.config import settings
 from app.core.image_security import ALLOWED_MIMES as IMAGE_ALLOWED_MIMES, validate_and_reencode
 from app.core.zip_security import validate_zip_upload
+from app.data import locarno as locarno_cache
 from app.db.session import get_db
 from app.models.patent import ConversionStatus, FileType, Patent
 from app.models.user import User
@@ -72,13 +73,27 @@ async def _get_owned_patent(patent_id: int, user: User, db: AsyncSession) -> Pat
 @router.post("/upload", response_model=PatentUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_patent(
     file: UploadFile = File(...),
+    design_name: str = Form(..., min_length=1, max_length=255),
+    locarno_main_class: str = Form(...),
+    locarno_subclass: str = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Store the uploaded ZIP as-is and create a Patent record (status=UPLOADED).
-    Does NOT trigger conversion -- the client must call POST /{id}/convert.
+    Phase-2 endpoint of the design-registration form: client submits the ZIP
+    along with the Phase-1 fields (design_name + Locarno classification) in a
+    single multipart request. Stored as UPLOADED; conversion is user-triggered
+    via POST /{id}/convert.
     """
+    await locarno_cache.validate_pair(db, locarno_main_class, locarno_subclass)
+
+    safe_design_name = _sanitize_filename(design_name.strip())
+    if not safe_design_name:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "design_name must contain at least one filename-safe character.",
+        )
+
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Only .zip files are accepted.")
 
@@ -87,7 +102,6 @@ async def upload_patent(
     # Full security validation (zip bomb, MIME, size, ratio, structure)
     model_ext, model_path_in_zip = validate_zip_upload(content, file.filename)
     file_type = FileType(MODEL_EXTENSIONS[model_ext])
-    model_stem = os.path.splitext(os.path.basename(model_path_in_zip))[0]
 
     # -- Persist ZIP to disk ---------------------------------------------------
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -104,7 +118,9 @@ async def upload_patent(
         user_id=current_user.id,
         zip_file_path=zip_rel,
         file_type=file_type,
-        model_filename=model_stem,
+        model_filename=safe_design_name,
+        locarno_main_class=locarno_main_class,
+        locarno_subclass=locarno_subclass,
         conversion_status=ConversionStatus.UPLOADED,
     )
     db.add(patent)

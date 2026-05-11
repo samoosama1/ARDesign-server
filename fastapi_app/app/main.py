@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, patents
+from app.api.routes import auth, locarno, patents
 from app.core.config import settings
 
 app = FastAPI(title="ARPatent API")
@@ -16,6 +16,7 @@ app.add_middleware(
 
 app.include_router(patents.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(locarno.router, prefix="/api")
 
 
 @app.get("/health")
