@@ -1,6 +1,7 @@
 /.venv
 **/__pycache__/
 /media
+out.txt
 **/.idea/
 /backend
 /fastapi_app/frontend/.vite
