@@ -77,8 +77,21 @@ def upgrade() -> None:
 
     # -- 3. Reshape patents_patent locarno columns ----------------------------
     # Previous migration created them NOT NULL with server_default='' so old
-    # rows backfilled cleanly. Now we want real FK integrity — convert '' to
-    # NULL, drop the default, and add FKs.
+    # rows backfilled cleanly. Now we want real FK integrity — drop NOT NULL
+    # FIRST (otherwise UPDATE-to-NULL is rejected), then null out the tombstone
+    # '' values, then drop the server_default.
+    op.alter_column(
+        "patents_patent",
+        "locarno_main_class",
+        existing_type=sa.String(length=32),
+        nullable=True,
+    )
+    op.alter_column(
+        "patents_patent",
+        "locarno_subclass",
+        existing_type=sa.String(length=255),
+        nullable=True,
+    )
     op.execute(
         "UPDATE patents_patent SET locarno_main_class = NULL WHERE locarno_main_class = ''"
     )
@@ -89,14 +102,12 @@ def upgrade() -> None:
         "patents_patent",
         "locarno_main_class",
         existing_type=sa.String(length=32),
-        nullable=True,
         server_default=None,
     )
     op.alter_column(
         "patents_patent",
         "locarno_subclass",
         existing_type=sa.String(length=255),
-        nullable=True,
         server_default=None,
     )
     op.create_foreign_key(
