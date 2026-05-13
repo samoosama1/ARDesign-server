@@ -187,7 +187,7 @@ export default function BrowsePage() {
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Typos welcome — e.g. 'chiar'"
+              placeholder="Start typing..."
             />
           </label>
 
