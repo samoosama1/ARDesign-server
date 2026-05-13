@@ -300,12 +300,15 @@ async def list_patents(
 
     q_clean = q.strip() if q else None
     if q_clean:
-        # Lower threshold per-transaction so short queries with one typo still
-        # match (default 0.3 is strict). SET LOCAL is scoped to this session.
-        await db.execute(text("SET LOCAL pg_trgm.similarity_threshold = 0.2"))
-        stmt = stmt.where(Patent.model_filename.op("%")(q_clean))
+        # Use word_similarity (not plain similarity) so long names like
+        # "subway_train_interior" aren't penalized for their length —
+        # word_similarity scores against the best matching window of the
+        # target string and respects non-alphanumeric word boundaries.
+        # SET LOCAL is scoped to this transaction only.
+        await db.execute(text("SET LOCAL pg_trgm.word_similarity_threshold = 0.3"))
+        stmt = stmt.where(Patent.model_filename.op("%>")(q_clean))
         stmt = stmt.order_by(
-            func.similarity(Patent.model_filename, q_clean).desc(),
+            func.word_similarity(q_clean, Patent.model_filename).desc(),
             Patent.uploaded_at.desc(),
         )
     else:
