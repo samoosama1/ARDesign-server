@@ -86,6 +86,7 @@ export default function Combobox({ options, value, onChange, placeholder, disabl
         type="text"
         className="combobox-input"
         value={display}
+        title={!open && selected ? selected.label : ''}
         onChange={(e) => {
           setQuery(e.target.value)
           setOpen(true)
@@ -104,6 +105,7 @@ export default function Combobox({ options, value, onChange, placeholder, disabl
             <li
               key={opt.value}
               data-idx={i}
+              title={opt.label}
               className={`combobox-option ${i === highlight ? 'highlight' : ''} ${
                 opt.value === value ? 'selected' : ''
               }`}
