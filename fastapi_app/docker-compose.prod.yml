@@ -17,6 +17,8 @@ services:
     container_name: arpatent_db
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "127.0.0.1:5432:5432"  # This maps Host Port 5432 to Container Port 5432
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

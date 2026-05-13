@@ -30,6 +30,8 @@ class PatentListItem(BaseModel):
     file_type: FileType | None
     status: ConversionStatus = Field(validation_alias="conversion_status")
     uploaded_at: datetime
+    locarno_main_class: str | None = None
+    locarno_subclass: str | None = None
 
     class Config:
         from_attributes = True

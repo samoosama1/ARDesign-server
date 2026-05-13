@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { apiFetch } from '../api/client'
+import { useLocarnoTree } from '../hooks/useLocarnoTree'
 import Combobox from './Combobox'
 
 /**
@@ -8,27 +9,7 @@ import Combobox from './Combobox'
  *   Phase 2: ZIP upload + submit.
  * Phase 1 is held in browser state — nothing is persisted until Phase 2 fires
  * the single multipart POST to /api/patents/upload.
- *
- * Locarno tree is fetched lazily from /api/locarno when the wizard first
- * opens, cached on the module instance for the rest of the session.
  */
-let locarnoCache = null
-let locarnoPromise = null
-
-function loadLocarno() {
-  if (locarnoCache) return Promise.resolve(locarnoCache)
-  if (locarnoPromise) return locarnoPromise
-  locarnoPromise = apiFetch('/api/locarno')
-    .then(async (res) => {
-      if (!res.ok) throw new Error(`Failed to load Locarno tree (${res.status})`)
-      const data = await res.json()
-      locarnoCache = data
-      return data
-    })
-    .finally(() => { locarnoPromise = null })
-  return locarnoPromise
-}
-
 export default function RegistrationWizard({ open, onClose, onComplete }) {
   const [phase, setPhase] = useState(1)
   const [designName, setDesignName] = useState('')
@@ -38,17 +19,8 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
-  const [tree, setTree] = useState(locarnoCache)
-  const [treeLoading, setTreeLoading] = useState(false)
-
-  useEffect(() => {
-    if (!open || tree) return
-    setTreeLoading(true)
-    loadLocarno()
-      .then(setTree)
-      .catch((e) => setError(e.message))
-      .finally(() => setTreeLoading(false))
-  }, [open, tree])
+  const { tree, loading: treeLoading, error: treeError } = useLocarnoTree(open)
+  const displayError = error || treeError
 
   const mainOptions = useMemo(() => {
     if (!tree) return []
@@ -196,7 +168,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
           </div>
         )}
 
-        {error && <p className="error">{error}</p>}
+        {displayError && <p className="error">{displayError}</p>}
 
         <footer className="wizard-footer">
           <button type="button" onClick={resetAndClose} disabled={submitting}>Cancel</button>
