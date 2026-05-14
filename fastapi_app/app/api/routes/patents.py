@@ -13,9 +13,9 @@ import re
 import shutil
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,7 @@ from app.core.image_security import ALLOWED_MIMES as IMAGE_ALLOWED_MIMES, valida
 from app.core.zip_security import validate_zip_upload
 from app.data import locarno as locarno_cache
 from app.db.session import get_db
-from app.models.patent import ConversionStatus, FileType, Patent
+from app.models.patent import ConversionStatus, FileType, ModelScale, Patent
 from app.models.user import User
 from app.schemas.patent import (
     PatentConvertResponse,
@@ -76,6 +76,7 @@ async def upload_patent(
     design_name: str = Form(..., min_length=1, max_length=255),
     locarno_main_class: str = Form(...),
     locarno_subclass: str = Form(...),
+    scale: ModelScale = Form(..., description="Source-file unit (MM/CM/IN/M)."),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -121,6 +122,7 @@ async def upload_patent(
         model_filename=safe_design_name,
         locarno_main_class=locarno_main_class,
         locarno_subclass=locarno_subclass,
+        scale=scale,
         conversion_status=ConversionStatus.UPLOADED,
     )
     db.add(patent)
@@ -279,13 +281,45 @@ async def get_status(
 async def list_patents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    q: str | None = Query(None, description="Fuzzy name search (typo-tolerant via pg_trgm)."),
+    locarno_main: str | None = Query(None, description="Filter by Locarno main class value."),
+    locarno_subclass: str | None = Query(None, description="Filter by Locarno subclass value."),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
-    result = await db.execute(
-        select(Patent)
-        .options(selectinload(Patent.user))
-        .order_by(Patent.uploaded_at.desc())
-    )
-    patents = result.scalars().all()
+    """Browse the design catalog.
+
+    With `q` set, results are ordered by trigram similarity (best matches first)
+    and filtered to rows whose `model_filename` is similar enough to `q`
+    (pg_trgm `%` operator at the session's similarity threshold).
+    """
+    stmt = select(Patent).options(selectinload(Patent.user))
+
+    if locarno_main:
+        stmt = stmt.where(Patent.locarno_main_class == locarno_main)
+    if locarno_subclass:
+        stmt = stmt.where(Patent.locarno_subclass == locarno_subclass)
+
+    q_clean = q.strip() if q else None
+    if q_clean:
+        # Use word_similarity (not plain similarity) so long names like
+        # "subway_train_interior" aren't penalized for their length —
+        # word_similarity scores against the best matching window of the
+        # target string and respects non-alphanumeric word boundaries.
+        # SET LOCAL is scoped to this transaction only.
+        await db.execute(text("SET LOCAL pg_trgm.word_similarity_threshold = 0.3"))
+        stmt = stmt.where(Patent.model_filename.op("%>")(q_clean))
+        stmt = stmt.order_by(
+            func.word_similarity(q_clean, Patent.model_filename).desc(),
+            Patent.uploaded_at.desc(),
+        )
+    else:
+        stmt = stmt.order_by(Patent.uploaded_at.desc())
+
+    stmt = stmt.limit(limit).offset(offset)
+
+    patents = (await db.execute(stmt)).scalars().all()
+
     return [
         PatentListItem(
             id=p.id,
@@ -295,6 +329,8 @@ async def list_patents(
             file_type=p.file_type,
             conversion_status=p.conversion_status,
             uploaded_at=p.uploaded_at,
+            locarno_main_class=p.locarno_main_class,
+            locarno_subclass=p.locarno_subclass,
         )
         for p in patents
     ]

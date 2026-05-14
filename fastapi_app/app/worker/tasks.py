@@ -25,7 +25,7 @@ import requests
 
 from app.core.config import settings
 from app.db.sync_session import SyncSessionLocal
-from app.models.patent import ConversionStatus, Patent
+from app.models.patent import ConversionStatus, ModelScale, Patent
 from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -34,13 +34,23 @@ logger = logging.getLogger(__name__)
 MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb", ".fbx"}
 
 # Docker image that contains /app/converter/main.py and xvfb-run
-CONVERTER_IMAGE = "youndria/arpatent:1.2"
+CONVERTER_IMAGE = "youndria/arpatent:1.4"
 
 # Resource limits for the ephemeral converter container
 CONTAINER_MEMORY = "12g"
 CONTAINER_CPUS = "1.5"
 CONTAINER_PIDS = "512"
 CONTAINER_TIMEOUT = 600  # seconds
+
+# main.py expects the unit as lowercase ('mm'/'cm'/'in'/'m'); the DB enum is
+# uppercase like every other enum in the project. Translate at the call site
+# so the wire/DB representation stays uppercase.
+_SCALE_TO_CLI: dict[ModelScale, str] = {
+    ModelScale.MM: "mm",
+    ModelScale.CM: "cm",
+    ModelScale.IN: "in",
+    ModelScale.M: "m",
+}
 
 # ---------------------------------------------------------------------------
 # Shell scripts that run INSIDE the ephemeral container.
@@ -58,11 +68,12 @@ _EXTRACT = (
 
 # For models that need conversion (OBJ/STL/STP/IGES/FBX).
 # $1 = absolute path to the model file inside /tmp/work.
-# FBX converter does os.chdir(/app/converter/) so out.glb may land there;
+# $2 = source unit string (mm/cm/in/m) — main.py's second positional arg.
+# FBX converter does os.chdir(/app/converter/) so output.glb may land there;
 # we try /tmp/work first, fall back to /app/converter/.
 #
 # We do NOT chain the converter command with && : the FBX path uses bpy,
-# which finishes writing out.glb successfully and then SIGSEGVs during
+# which finishes writing output.glb successfully and then SIGSEGVs during
 # Python interpreter shutdown because the surrounding container is being
 # torn down at the same time. The crash is cosmetic — the GLB is already
 # on disk. We check for the file itself, ignoring Python's exit code, so
@@ -73,14 +84,14 @@ CONVERT_SCRIPT = (
     "cd /tmp/work\n"
     "set +e\n"
     "xvfb-run -a /app/converter/venv/bin/python3.11 "
-    '/app/converter/main.py "$1"\n'
+    '/app/converter/main.py "$1" "$2"\n'
     "PYCODE=$?\n"
     "mkdir -p /output\n"
-    "if [ -f /tmp/work/out.glb ]; then "
-    "cp /tmp/work/out.glb /output/out.glb; exit 0; fi\n"
-    "if [ -f /app/converter/out.glb ]; then "
-    "cp /app/converter/out.glb /output/out.glb; exit 0; fi\n"
-    'echo "Converter produced no out.glb (python exited $PYCODE)" >&2\n'
+    "if [ -f /tmp/work/output.glb ]; then "
+    "cp /tmp/work/output.glb /output/output.glb; exit 0; fi\n"
+    "if [ -f /app/converter/output.glb ]; then "
+    "cp /app/converter/output.glb /output/output.glb; exit 0; fi\n"
+    'echo "Converter produced no output.glb (python exited $PYCODE)" >&2\n'
     "exit ${PYCODE:-1}\n"
 )
 
@@ -89,7 +100,7 @@ CONVERT_SCRIPT = (
 GLB_COPY_SCRIPT = (
     f"{_EXTRACT} && "
     "mkdir -p /output && "
-    'cp "$1" /output/out.glb'
+    'cp "$1" /output/output.glb'
 )
 
 
@@ -139,16 +150,20 @@ def convert_patent_task(self, patent_id: int) -> None:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         stem = patent.model_filename or os.path.splitext(os.path.basename(model_in_zip))[0]
         glb_dir_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}"
-        glb_rel = f"{glb_dir_rel}/out.glb"
+        glb_rel = f"{glb_dir_rel}/output.glb"
 
-        # -- 4. Choose script and build model argument ---------------------------
-        # model_arg is passed as $1 to bash — never part of the script string.
+        # -- 4. Choose script and build positional arguments ---------------------
+        # model_arg is passed as $1, scale_arg as $2 — never interpolated into
+        # the script text, so neither is reachable by shell injection.
         model_arg = f"/tmp/work/{model_in_zip}"
+        scale_arg = _SCALE_TO_CLI[ModelScale(patent.scale)]
 
         if model_ext == ".glb":
             script = GLB_COPY_SCRIPT
+            script_args = [model_arg]            # GLB_COPY_SCRIPT only reads $1
         else:
             script = CONVERT_SCRIPT
+            script_args = [model_arg, scale_arg]
 
         # -- 5. Create container (no volume mounts — fully isolated) -------------
         create_cmd = [
@@ -167,9 +182,9 @@ def convert_patent_task(self, patent_id: int) -> None:
             # Entrypoint
             "--entrypoint", "bash",
             CONVERTER_IMAGE,
-            "-c", script, "_", model_arg,
-            #     ^^^^^^       ^^^^^^^^^
-            #     script text  $1 = data argument (safe from injection)
+            "-c", script, "_", *script_args,
+            #     ^^^^^^       ^^^^^^^^^^^
+            #     script text  $1, $2... = data args (safe from injection)
         ]
 
         logger.info("Creating converter container %s for patent %d",
@@ -200,7 +215,7 @@ def convert_patent_task(self, patent_id: int) -> None:
         os.makedirs(os.path.dirname(glb_abs), exist_ok=True)
 
         _docker(
-            ["docker", "cp", f"{container_name}:/output/out.glb", glb_abs],
+            ["docker", "cp", f"{container_name}:/output/output.glb", glb_abs],
             check=True,
         )
 
@@ -327,7 +342,7 @@ def generate_from_image_task(
         # -- 4. Persist GLB on the media volume -------------------------------
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         stem = patent.model_filename or f"generated_{patent.id}"
-        glb_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}/out.glb"
+        glb_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}/output.glb"
         glb_abs = os.path.join(settings.media_root, glb_rel)
         os.makedirs(os.path.dirname(glb_abs), exist_ok=True)
         with open(glb_abs, "wb") as f:
