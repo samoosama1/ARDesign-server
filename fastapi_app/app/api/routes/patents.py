@@ -25,7 +25,7 @@ from app.core.image_security import ALLOWED_MIMES as IMAGE_ALLOWED_MIMES, valida
 from app.core.zip_security import validate_zip_upload
 from app.data import locarno as locarno_cache
 from app.db.session import get_db
-from app.models.patent import ConversionStatus, FileType, Patent
+from app.models.patent import ConversionStatus, FileType, ModelScale, Patent
 from app.models.user import User
 from app.schemas.patent import (
     PatentConvertResponse,
@@ -76,6 +76,7 @@ async def upload_patent(
     design_name: str = Form(..., min_length=1, max_length=255),
     locarno_main_class: str = Form(...),
     locarno_subclass: str = Form(...),
+    scale: ModelScale = Form(..., description="Source-file unit (MM/CM/IN/M)."),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -121,6 +122,7 @@ async def upload_patent(
         model_filename=safe_design_name,
         locarno_main_class=locarno_main_class,
         locarno_subclass=locarno_subclass,
+        scale=scale,
         conversion_status=ConversionStatus.UPLOADED,
     )
     db.add(patent)

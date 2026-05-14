@@ -21,6 +21,17 @@ class FileType(str, enum.Enum):
     IMAGE = "IMAGE"   # source was one or more 2D images, generated via Hunyuan3D
 
 
+class ModelScale(str, enum.Enum):
+    """Source-file unit chosen at upload time. The converter CLI takes the
+    lowercase form ('mm'/'cm'/'in'/'m'); the worker translates at the call
+    site so the wire/DB representation stays uppercase like every other enum
+    in this module."""
+    MM = "MM"
+    CM = "CM"
+    IN = "IN"
+    M = "M"
+
+
 class ConversionStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"           # ZIP stored, awaiting user-triggered conversion
     QUEUED = "QUEUED"               # Celery task enqueued, waiting for a worker
@@ -57,6 +68,13 @@ class Patent(Base):
     )
     locarno_subclass: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="", doc="LocarnoSubclass enum value"
+    )
+    scale: Mapped[ModelScale] = mapped_column(
+        Enum(ModelScale, name="modelscale_enum"),
+        nullable=False,
+        default=ModelScale.M,
+        server_default=ModelScale.M.value,
+        doc="Source-file unit; meaningful for ZIP uploads, no-op for image-gen.",
     )
 
     # --- storage paths ---

@@ -25,7 +25,7 @@ import requests
 
 from app.core.config import settings
 from app.db.sync_session import SyncSessionLocal
-from app.models.patent import ConversionStatus, Patent
+from app.models.patent import ConversionStatus, ModelScale, Patent
 from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,16 @@ CONTAINER_MEMORY = "12g"
 CONTAINER_CPUS = "1.5"
 CONTAINER_PIDS = "512"
 CONTAINER_TIMEOUT = 600  # seconds
+
+# main.py expects the unit as lowercase ('mm'/'cm'/'in'/'m'); the DB enum is
+# uppercase like every other enum in the project. Translate at the call site
+# so the wire/DB representation stays uppercase.
+_SCALE_TO_CLI: dict[ModelScale, str] = {
+    ModelScale.MM: "mm",
+    ModelScale.CM: "cm",
+    ModelScale.IN: "in",
+    ModelScale.M: "m",
+}
 
 # ---------------------------------------------------------------------------
 # Shell scripts that run INSIDE the ephemeral container.
@@ -58,6 +68,7 @@ _EXTRACT = (
 
 # For models that need conversion (OBJ/STL/STP/IGES/FBX).
 # $1 = absolute path to the model file inside /tmp/work.
+# $2 = source unit string (mm/cm/in/m) — main.py's second positional arg.
 # FBX converter does os.chdir(/app/converter/) so output.glb may land there;
 # we try /tmp/work first, fall back to /app/converter/.
 #
@@ -73,7 +84,7 @@ CONVERT_SCRIPT = (
     "cd /tmp/work\n"
     "set +e\n"
     "xvfb-run -a /app/converter/venv/bin/python3.11 "
-    '/app/converter/main.py "$1"\n'
+    '/app/converter/main.py "$1" "$2"\n'
     "PYCODE=$?\n"
     "mkdir -p /output\n"
     "if [ -f /tmp/work/output.glb ]; then "
@@ -141,14 +152,18 @@ def convert_patent_task(self, patent_id: int) -> None:
         glb_dir_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}"
         glb_rel = f"{glb_dir_rel}/output.glb"
 
-        # -- 4. Choose script and build model argument ---------------------------
-        # model_arg is passed as $1 to bash — never part of the script string.
+        # -- 4. Choose script and build positional arguments ---------------------
+        # model_arg is passed as $1, scale_arg as $2 — never interpolated into
+        # the script text, so neither is reachable by shell injection.
         model_arg = f"/tmp/work/{model_in_zip}"
+        scale_arg = _SCALE_TO_CLI[ModelScale(patent.scale)]
 
         if model_ext == ".glb":
             script = GLB_COPY_SCRIPT
+            script_args = [model_arg]            # GLB_COPY_SCRIPT only reads $1
         else:
             script = CONVERT_SCRIPT
+            script_args = [model_arg, scale_arg]
 
         # -- 5. Create container (no volume mounts — fully isolated) -------------
         create_cmd = [
@@ -167,9 +182,9 @@ def convert_patent_task(self, patent_id: int) -> None:
             # Entrypoint
             "--entrypoint", "bash",
             CONVERTER_IMAGE,
-            "-c", script, "_", model_arg,
-            #     ^^^^^^       ^^^^^^^^^
-            #     script text  $1 = data argument (safe from injection)
+            "-c", script, "_", *script_args,
+            #     ^^^^^^       ^^^^^^^^^^^
+            #     script text  $1, $2... = data args (safe from injection)
         ]
 
         logger.info("Creating converter container %s for patent %d",

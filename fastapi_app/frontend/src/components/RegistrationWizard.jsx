@@ -3,6 +3,16 @@ import { apiFetch } from '../api/client'
 import { useLocarnoTree } from '../hooks/useLocarnoTree'
 import Combobox from './Combobox'
 
+// Mirrors backend ModelScale enum (app/models/patent.py). The chip value is
+// the enum name sent over the wire; the worker maps it to the converter's
+// lowercase CLI form. Default 'MM' since most engineering exports are mm.
+const SCALE_OPTIONS = [
+  { value: 'MM', label: 'mm', hint: 'millimeters' },
+  { value: 'CM', label: 'cm', hint: 'centimeters' },
+  { value: 'M', label: 'm', hint: 'meters' },
+  { value: 'IN', label: 'in', hint: 'inches' },
+]
+
 /**
  * 2-phase design registration form.
  *   Phase 1: design name + Locarno main class + Locarno subclass.
@@ -16,6 +26,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
   const [mainClass, setMainClass] = useState('')
   const [subclass, setSubclass] = useState('')
   const [file, setFile] = useState(null)
+  const [scale, setScale] = useState('MM')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
@@ -49,6 +60,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
     setMainClass('')
     setSubclass('')
     setFile(null)
+    setScale('MM')
     setError(null)
     onClose()
   }
@@ -75,6 +87,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
       form.append('design_name', designName.trim())
       form.append('locarno_main_class', mainClass)
       form.append('locarno_subclass', subclass)
+      form.append('scale', scale)
       const res = await apiFetch('/api/patents/upload', { method: 'POST', body: form })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -165,6 +178,31 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
                 {file.name} ({Math.round(file.size / 1024)} KB)
               </p>
             )}
+            <div className="wizard-field">
+              <span>Source unit</span>
+              <div className="mv-preset-options">
+                {SCALE_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`mv-preset-chip ${scale === opt.value ? 'active' : ''}`}
+                    title={opt.hint}
+                  >
+                    <input
+                      type="radio"
+                      name="scale"
+                      value={opt.value}
+                      checked={scale === opt.value}
+                      onChange={() => setScale(opt.value)}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <p className="meta">
+                The unit your 3D file was exported in. Used to scale the model so
+                AR previews match real-world size.
+              </p>
+            </div>
           </div>
         )}
 
