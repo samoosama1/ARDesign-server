@@ -280,7 +280,6 @@ async def get_status(
 @router.get("/", response_model=list[PatentListItem])
 async def list_patents(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
     q: str | None = Query(None, description="Fuzzy name search (typo-tolerant via pg_trgm)."),
     locarno_main: str | None = Query(None, description="Filter by Locarno main class value."),
     locarno_subclass: str | None = Query(None, description="Filter by Locarno subclass value."),
@@ -288,6 +287,11 @@ async def list_patents(
     offset: int = Query(0, ge=0),
 ):
     """Browse the design catalog.
+
+    Public endpoint (no auth) so anonymous visitors can see the catalog.
+    Per-row owner-only actions (convert/delete) live behind their own auth-gated
+    routes; this list only exposes data that's already viewable via the public
+    /model endpoint.
 
     With `q` set, results are ordered by trigram similarity (best matches first)
     and filtered to rows whose `model_filename` is similar enough to `q`
