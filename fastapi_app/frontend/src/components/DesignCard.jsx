@@ -22,8 +22,10 @@ export default function DesignCard({
   onDownload,
   onQR,
   onDelete,
+  onWarnings,
 }) {
   const isOwner = patent.user_id === currentUserId
+  const warningCount = patent.warnings?.length ?? 0
 
   let mainLabel = null
   let subLabel = null
@@ -43,7 +45,19 @@ export default function DesignCard({
   return (
     <div className="patent-card">
       <h3>{patent.model_filename}</h3>
-      <span className={statusClass(patent.status)}>{patent.status}</span>
+      <div className="card-status-row">
+        <span className={statusClass(patent.status)}>{patent.status}</span>
+        {warningCount > 0 && onWarnings && (
+          <button
+            type="button"
+            className="warning-badge"
+            onClick={() => onWarnings(patent)}
+            title={`${warningCount} warning${warningCount === 1 ? '' : 's'} from the converter — click for details`}
+          >
+            ⚠ {warningCount}
+          </button>
+        )}
+      </div>
       {locarnoLine && <p className="meta locarno-line">{locarnoLine}</p>}
       <p className="meta">Type: {patent.file_type}</p>
       <p className="meta">Uploaded by: {patent.uploaded_by}</p>

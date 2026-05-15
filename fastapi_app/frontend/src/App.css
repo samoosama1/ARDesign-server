@@ -593,6 +593,35 @@ header.app > h1 { font-size: 1.5rem; }
 .status-converted { background: var(--color-success); }
 .status-failed { background: var(--color-danger); }
 
+.card-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #fff7ed;
+  color: var(--color-warning);
+  border: 1px solid #fdba74;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  transition: background 0.15s, color 0.15s;
+}
+.warning-badge:hover {
+  background: var(--color-warning);
+  color: #fff;
+  border-color: var(--color-warning);
+}
+
 .card-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
 
 .card-actions button {
@@ -666,6 +695,53 @@ header.app > h1 { font-size: 1.5rem; }
 }
 
 .modal button:hover { background: var(--bg-muted); }
+
+.warnings-modal {
+  max-width: 560px;
+  text-align: left;
+}
+.warnings-modal h3 { margin-bottom: 0.5rem; }
+.warnings-modal .meta { margin-bottom: 1rem; }
+
+.warnings-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.warning-item {
+  border-left: 3px solid var(--color-warning);
+  background: #fff7ed;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+}
+.warning-item.warning-import { border-left-color: var(--color-info); background: #ecfeff; }
+
+.warning-phase {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.warning-message { font-size: 0.9rem; color: var(--text-primary); margin: 0.15rem 0; }
+.warning-details {
+  display: block;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  background: rgba(0,0,0,0.05);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
 
 .empty { text-align: center; color: var(--text-muted); padding: 3rem; font-size: 1.1rem; }
 

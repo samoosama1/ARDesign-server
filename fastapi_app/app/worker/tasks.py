@@ -14,9 +14,11 @@ generate_from_image_task (queue: generate, concurrency=1)
   run two generations in parallel.
 """
 import base64
+import json
 import logging
 import os
 import subprocess
+import tempfile
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -87,6 +89,14 @@ CONVERT_SCRIPT = (
     '/app/converter/main.py "$1" "$2"\n'
     "PYCODE=$?\n"
     "mkdir -p /output\n"
+    # Soft-warning JSONs are written to the converter's CWD: OBJ runs from
+    # /tmp/work, FBX chdirs to /app/converter mid-script. Both files are
+    # optional — copy only the ones that exist; missing means no warnings.
+    "for d in /tmp/work /app/converter; do\n"
+    '  for f in import_errors.json export_errors.json; do\n'
+    '    if [ -f "$d/$f" ]; then cp "$d/$f" "/output/$f"; fi\n'
+    "  done\n"
+    "done\n"
     "if [ -f /tmp/work/output.glb ]; then "
     "cp /tmp/work/output.glb /output/output.glb; exit 0; fi\n"
     "if [ -f /app/converter/output.glb ]; then "
@@ -118,6 +128,44 @@ def _find_model_file_in_zip(zip_abs_path: str) -> str:
 def _docker(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     """Run a docker CLI command via the mounted socket."""
     return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
+
+def _collect_converter_warnings(container_name: str) -> list[dict]:
+    """Pull import_errors.json / export_errors.json out of the container,
+    tag each entry with its phase, and return a merged list. Missing or
+    unparseable files are silently treated as 'no warnings' — these are soft
+    diagnostics, not a reason to fail an otherwise-successful conversion."""
+    merged: list[dict] = []
+    for phase, fname in (("import", "import_errors.json"), ("export", "export_errors.json")):
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            cp = _docker(
+                ["docker", "cp", f"{container_name}:/output/{fname}", tmp_path],
+            )
+            if cp.returncode != 0:
+                continue  # file didn't exist in /output → no warnings of this phase
+            with open(tmp_path, encoding="utf-8") as f:
+                entries = json.load(f)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                merged.append({
+                    "phase": phase,
+                    "message": entry.get("message", ""),
+                    "details": entry.get("details", ""),
+                })
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not parse %s from container %s: %s",
+                           fname, container_name, exc)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+    return merged
 
 
 @celery_app.task(bind=True, max_retries=0, name="convert_patent")
@@ -222,9 +270,19 @@ def convert_patent_task(self, patent_id: int) -> None:
         if not os.path.exists(glb_abs):
             raise FileNotFoundError(f"Expected GLB not found at {glb_abs}")
 
-        # -- 9. Persist success --------------------------------------------------
+        # -- 9. Pull soft warnings (optional) ------------------------------------
+        # Skipped for GLB passthrough since the converter doesn't run.
+        warnings: list[dict] = []
+        if model_ext != ".glb":
+            warnings = _collect_converter_warnings(container_name)
+            if warnings:
+                logger.info("Patent %d converted with %d warning(s)",
+                             patent_id, len(warnings))
+
+        # -- 10. Persist success -------------------------------------------------
         patent.glb_file_path = glb_rel
         patent.conversion_status = ConversionStatus.CONVERTED
+        patent.conversion_warnings = warnings or None
         db.commit()
         logger.info("Patent %d converted successfully -> %s", patent_id, glb_rel)
 

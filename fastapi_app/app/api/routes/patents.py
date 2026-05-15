@@ -272,6 +272,7 @@ async def get_status(
         patent_id=patent.id,
         status=patent.conversion_status,
         error=patent.conversion_error,
+        warnings=patent.conversion_warnings or None,
     )
 
 
@@ -335,6 +336,7 @@ async def list_patents(
             uploaded_at=p.uploaded_at,
             locarno_main_class=p.locarno_main_class,
             locarno_subclass=p.locarno_subclass,
+            conversion_warnings=p.conversion_warnings or None,
         )
         for p in patents
     ]
