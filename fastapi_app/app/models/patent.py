@@ -107,6 +107,14 @@ class Patent(Base):
     conversion_error: Mapped[Optional[str]] = mapped_column(
         String(2000), nullable=True, doc="Last error message from a failed conversion attempt"
     )
+    # Soft warnings emitted by the converter while the conversion still
+    # succeeded — e.g. an OBJ referenced an unsupported MTL line, or a texture
+    # had no resolvable size at export time. Shape: list[{phase, message,
+    # details}] where phase is "import" or "export". Surfaced in the UI as a ⚠
+    # badge so the user knows to re-check the rendered model.
+    conversion_warnings: Mapped[Optional[Any]] = mapped_column(
+        JSON, nullable=True, doc="Parsed import/export warning list from the converter."
+    )
 
     # --- timestamps ---
     uploaded_at: Mapped[datetime] = mapped_column(

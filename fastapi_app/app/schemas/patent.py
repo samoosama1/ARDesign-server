@@ -16,10 +16,20 @@ class PatentConvertResponse(BaseModel):
     status: ConversionStatus
 
 
+class ConversionWarning(BaseModel):
+    """A single soft-warning emitted by the converter. Both fields are
+    user-facing strings (Turkish, sourced from the converter's pattern
+    dictionary in handlers.py)."""
+    phase: str
+    message: str
+    details: str
+
+
 class PatentStatusResponse(BaseModel):
     patent_id: int
     status: ConversionStatus
     error: str | None
+    warnings: list[ConversionWarning] | None = None
 
 
 class PatentListItem(BaseModel):
@@ -32,6 +42,9 @@ class PatentListItem(BaseModel):
     uploaded_at: datetime
     locarno_main_class: str | None = None
     locarno_subclass: str | None = None
+    warnings: list[ConversionWarning] | None = Field(
+        default=None, validation_alias="conversion_warnings"
+    )
 
     class Config:
         from_attributes = True

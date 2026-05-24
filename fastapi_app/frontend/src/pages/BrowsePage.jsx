@@ -33,10 +33,11 @@ export default function BrowsePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // Viewer + QR modals
+  // Viewer + QR + warnings modals
   const [viewerPatent, setViewerPatent] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   const [qrPatentName, setQrPatentName] = useState('')
+  const [warningsPatent, setWarningsPatent] = useState(null)
 
   const pollRefs = useRef({})
 
@@ -245,6 +246,7 @@ export default function BrowsePage() {
                   onDownload={handleDownload}
                   onQR={handleQR}
                   onDelete={handleDelete}
+                  onWarnings={setWarningsPatent}
                 />
               ))}
             </section>
@@ -289,6 +291,30 @@ export default function BrowsePage() {
             <button className="viewer-close" onClick={() => setViewerPatent(null)}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {warningsPatent && (
+        <div className="modal-overlay" onClick={() => setWarningsPatent(null)}>
+          <div className="modal warnings-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Dönüşüm uyarıları — {warningsPatent.model_filename}</h3>
+            <p className="meta">
+              Model başarıyla dönüştürüldü, ancak dönüştürücü aşağıdaki konular
+              hakkında uyardı. Modeli kontrol etmenizi öneririz.
+            </p>
+            <ul className="warnings-list">
+              {warningsPatent.warnings?.map((w, i) => (
+                <li key={i} className={`warning-item warning-${w.phase}`}>
+                  <span className="warning-phase">
+                    {w.phase === 'import' ? 'İçe aktarma' : 'Dışa aktarma'}
+                  </span>
+                  <p className="warning-message">{w.message}</p>
+                  {w.details && <code className="warning-details">{w.details}</code>}
+                </li>
+              ))}
+            </ul>
+            <button onClick={() => setWarningsPatent(null)}>Kapat</button>
           </div>
         </div>
       )}

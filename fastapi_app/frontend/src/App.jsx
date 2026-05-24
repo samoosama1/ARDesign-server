@@ -8,7 +8,9 @@ import LandingPage from './pages/LandingPage'
 import BrowsePage from './pages/BrowsePage'
 import UploadPage from './pages/UploadPage'
 
-function AuthedLayout() {
+// Layout shared by every in-app page (authed or anonymous). NavBar handles
+// its own conditional rendering based on auth state.
+function AppLayout() {
   return (
     <>
       <NavBar />
@@ -24,16 +26,17 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <AuthedLayout />
-              </ProtectedRoute>
-            }
-          >
+          <Route element={<AppLayout />}>
             <Route path="/" element={<LandingPage />} />
             <Route path="/browse" element={<BrowsePage />} />
-            <Route path="/upload" element={<UploadPage />} />
+            <Route
+              path="/upload"
+              element={
+                <ProtectedRoute>
+                  <UploadPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

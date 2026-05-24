@@ -24,8 +24,17 @@ export default function NavBar() {
       </nav>
 
       <div className="nav-right">
-        <span className="username">{user?.username}</span>
-        <button className="btn-logout" onClick={logout}>Sign Out</button>
+        {user ? (
+          <>
+            <span className="username">{user.username}</span>
+            <button className="btn-logout" onClick={logout}>Sign Out</button>
+          </>
+        ) : (
+          <>
+            <NavLink to="/login" className="nav-link">Sign In</NavLink>
+            <NavLink to="/register" className="nav-link">Register</NavLink>
+          </>
+        )}
       </div>
     </header>
   )
