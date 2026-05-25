@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb", ".fbx"}
 
 # Docker image that contains /app/converter/main.py and xvfb-run
-CONVERTER_IMAGE = "youndria/arpatent:1.4"
+CONVERTER_IMAGE = "youndria/arpatent:1.5"
 
 # Resource limits for the ephemeral converter container
 CONTAINER_MEMORY = "12g"
