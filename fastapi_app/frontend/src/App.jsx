@@ -1,12 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminRoute from './components/AdminRoute'
 import NavBar from './components/NavBar'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import LandingPage from './pages/LandingPage'
 import BrowsePage from './pages/BrowsePage'
 import UploadPage from './pages/UploadPage'
+import AdminPage from './pages/AdminPage'
 
 // Layout shared by every in-app page (authed or anonymous). NavBar handles
 // its own conditional rendering based on auth state.
@@ -35,6 +37,14 @@ export default function App() {
                 <ProtectedRoute>
                   <UploadPage />
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminPage />
+                </AdminRoute>
               }
             />
           </Route>

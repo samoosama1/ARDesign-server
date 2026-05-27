@@ -68,6 +68,33 @@ async def _get_owned_patent(patent_id: int, user: User, db: AsyncSession) -> Pat
     return patent
 
 
+def delete_patent_files(patent: Patent) -> None:
+    """Remove a patent's on-disk artifacts without touching anything else.
+
+    The converted GLB and (for image-gen) the source images each live in their
+    own per-patent directory, so we remove those directories whole. The uploaded
+    ZIP, however, is a lone file inside the shared `uploads/user_X/` directory
+    that also holds the user's other ZIPs — so we delete just that file, never
+    its parent. Same for an optional thumbnail. Shared by the owner delete and
+    the admin delete.
+    """
+    media_root = settings.media_root
+
+    # Per-patent directories — safe to remove whole.
+    if patent.glb_file_path:
+        glb_dir = os.path.dirname(os.path.join(media_root, patent.glb_file_path))
+        shutil.rmtree(glb_dir, ignore_errors=True)
+    if patent.storage_path:
+        shutil.rmtree(os.path.join(media_root, patent.storage_path), ignore_errors=True)
+
+    # Lone files in shared directories — remove only the file.
+    for rel_path in (patent.zip_file_path, patent.thumbnail_path):
+        if rel_path:
+            abs_path = os.path.join(media_root, rel_path)
+            if os.path.isfile(abs_path):
+                os.remove(abs_path)
+
+
 # -- Upload --------------------------------------------------------------------
 
 @router.post("/upload", response_model=PatentUploadResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -383,16 +410,7 @@ async def delete_patent(
     """Delete a patent record and its files from disk."""
     patent = await _get_owned_patent(patent_id, current_user, db)
 
-    # Clean up files
-    for rel_path in [patent.glb_file_path, patent.zip_file_path]:
-        if rel_path:
-            abs_path = os.path.join(settings.media_root, rel_path)
-            # Remove the parent directory (e.g. converted/user_X/timestamp_stem/)
-            parent = os.path.dirname(abs_path)
-            if os.path.isdir(parent):
-                shutil.rmtree(parent, ignore_errors=True)
-            elif os.path.isfile(abs_path):
-                os.remove(abs_path)
+    delete_patent_files(patent)
 
     await db.delete(patent)
     await db.commit()

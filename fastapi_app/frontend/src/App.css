@@ -1115,3 +1115,85 @@ header.app > h1 { font-size: 1.5rem; }
 .combobox-option.highlight { background: var(--color-primary-soft); color: var(--color-primary); }
 .combobox-option.selected { font-weight: 600; }
 .combobox-empty { padding: 0.65rem 0.85rem; color: var(--text-muted); font-size: 0.85rem; }
+
+/* -- Admin panel ----------------------------------------------------------- */
+.admin-title { margin: 0.5rem 0 1rem; color: var(--text-primary); }
+.admin-section { margin-top: 1rem; }
+.admin-error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.admin-empty { color: var(--text-muted); text-align: center; padding: 1.5rem; }
+
+.admin-search, .admin-add-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.admin-search input, .admin-add-row input {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.admin-search input { flex: 1; min-width: 200px; }
+.admin-search button, .admin-add-row button,
+.admin-row-actions button, .locarno-actions button,
+.locarno-row button, .locarno-toggle {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.admin-search button:hover, .admin-add-row button:hover,
+.admin-row-actions button:hover:not(:disabled),
+.locarno-actions button:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+}
+.admin-row-actions button:disabled, .locarno-actions button:disabled { opacity: 0.4; cursor: default; }
+.btn-delete { color: var(--color-danger) !important; border-color: var(--color-danger-soft) !important; }
+.btn-delete:hover:not(:disabled) { background: var(--color-danger-soft) !important; }
+
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border-default);
+  vertical-align: middle;
+}
+.admin-table th { color: var(--text-muted); font-weight: 600; }
+.admin-row-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.admin-badge {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+}
+.admin-status { font-weight: 600; }
+.admin-status-CONVERTED { color: var(--color-success); }
+.admin-status-FAILED { color: var(--color-danger); }
+.admin-status-IN_PROCESSING, .admin-status-QUEUED { color: var(--color-warning); }
+.admin-error-hint { color: var(--color-danger); cursor: help; }
+
+/* Locarno tree editor */
+.locarno-tree, .locarno-subs { list-style: none; margin: 0; padding: 0; }
+.locarno-subs { margin-left: 1.75rem; border-left: 2px solid var(--border-default); padding-left: 0.5rem; }
+.locarno-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--bg-muted);
+}
+.locarno-toggle { width: 1.8rem; }
+.locarno-num { min-width: 2rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.locarno-label { flex: 1; color: var(--text-primary); }
+.locarno-value { font-size: 0.75rem; color: var(--text-muted); background: var(--bg-muted); padding: 0.1rem 0.4rem; border-radius: 5px; }
+.locarno-edit { flex: 1; padding: 0.35rem 0.6rem; border: 1px solid var(--color-primary); border-radius: 8px; }
+.locarno-actions { display: flex; gap: 0.3rem; }
