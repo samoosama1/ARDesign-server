@@ -6,7 +6,7 @@ Create Date: 2026-05-25 00:00:00.000000
 
 Introduces the application role (USER/ADMIN) that gates the admin panel.
 Backfilled with 'USER' so every existing account stays a regular user; the
-first admin is promoted out-of-band via scripts/set_admin.py. The dormant
+first admin is promoted out-of-band via app/scripts/set_admin.py. The dormant
 Django-era is_staff/is_superuser columns are left untouched and unused.
 """
 from typing import Sequence, Union

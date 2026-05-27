@@ -239,6 +239,38 @@ docker compose -f docker-compose.prod.yml run --rm --user root api \
 
 Skip on fresh installs.
 
+### Admin panel
+
+The app has a role-gated admin panel (manage users, designs, and the Locarno
+classification tree). Authorization is a single `role` column on the user
+(`USER` / `ADMIN`), checked fresh from the DB on every request — the JWT carries
+identity, not privilege, so a stolen normal-user token can't reach `/api/admin/*`
+(it gets a 403).
+
+There is **no HTTP route to self-promote** — the first admin is created
+out-of-band with a management command against the running `api` container.
+Because the command ships inside the image (under `app/scripts/`, not the
+dockerignored top-level `scripts/`), it runs identically in dev and prod:
+
+```bash
+# prod
+docker compose -f docker-compose.prod.yml exec api python -m app.scripts.set_admin <username>
+
+# dev
+docker compose exec api python -m app.scripts.set_admin <username>
+```
+
+The user must already exist (register through the UI first), and must re-login
+afterward for the new role to appear in their session. After the first admin
+exists, all further role changes go through the panel
+(`PATCH /api/admin/users/{id}`). To demote, add `--revoke`. The command refuses
+to demote/remove the last remaining admin.
+
+> The command is just a thin wrapper over a DB write the `api` container can
+> already make — it is not an additional attack surface. The real escalation
+> levers are keeping `JWT_SECRET_KEY` secret (a leaked secret lets an attacker
+> mint an admin token) and preventing code execution inside the container.
+
 ### Public access with a real domain (optional)
 
 If you move off ngrok to a server with a public IP and your own domain:

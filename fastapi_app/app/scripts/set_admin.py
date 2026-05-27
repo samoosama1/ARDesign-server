@@ -1,12 +1,19 @@
 """Promote (or demote) a user's admin role from the command line.
 
 Bootstrapping the first admin is intentionally out-of-band: there is no HTTP
-endpoint to self-promote, so the very first admin is created with this script.
+endpoint to self-promote, so the very first admin is created with this command.
 After that, admins manage each other via PATCH /api/admin/users/{id}.
 
-Usage (from fastapi_app/, inside the api container):
-    docker compose exec api python -m scripts.set_admin <username>
-    docker compose exec api python -m scripts.set_admin <username> --revoke
+This lives under app/ (not the dockerignored top-level scripts/) so it ships in
+the image and runs identically in dev and prod. Run against a *running* stack:
+
+    # dev
+    docker compose exec api python -m app.scripts.set_admin <username>
+    # prod
+    docker compose -f docker-compose.prod.yml exec api python -m app.scripts.set_admin <username>
+
+    # demote back to a regular user with --revoke:
+    docker compose -f docker-compose.prod.yml exec api python -m app.scripts.set_admin <username> --revoke
 """
 import argparse
 import sys
