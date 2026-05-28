@@ -1197,3 +1197,98 @@ header.app > h1 { font-size: 1.5rem; }
 .locarno-value { font-size: 0.75rem; color: var(--text-muted); background: var(--bg-muted); padding: 0.1rem 0.4rem; border-radius: 5px; }
 .locarno-edit { flex: 1; padding: 0.35rem 0.6rem; border: 1px solid var(--color-primary); border-radius: 8px; }
 .locarno-actions { display: flex; gap: 0.3rem; }
+
+/* Secondary button (used in dialogs and inline editing) */
+.btn-secondary {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-muted); color: var(--text-primary); }
+.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Locarno: deliberate-save bar — nothing is persisted until "Save changes" */
+.locarno-savebar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.locarno-savebar.is-dirty {
+  border-color: var(--color-accent);
+  background: #fffbeb;
+}
+.locarno-savebar-status { font-size: 0.9rem; color: var(--text-secondary); font-weight: 600; }
+.locarno-savebar.is-dirty .locarno-savebar-status { color: var(--color-warning); }
+.locarno-savebar-actions { display: flex; gap: 0.5rem; }
+
+/* Locarno: live pending-changes panel */
+.locarno-diff {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-muted);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+.locarno-diff-title { margin: 0 0 0.6rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.locarno-diff-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.locarno-diff-item { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.88rem; color: var(--text-primary); }
+.diff-text { line-height: 1.3; }
+.diff-parent { color: var(--text-muted); }
+
+/* Change badges, shared by the diff list and the in-tree row markers */
+.diff-badge {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 6px;
+  padding: 0.12rem 0.42rem;
+}
+.diff-badge.diff-add { background: #d1fae5; color: #047857; }
+.diff-badge.diff-edit { background: var(--color-primary-soft); color: var(--color-primary); }
+.diff-badge.diff-remove { background: var(--color-danger-soft); color: var(--color-danger); }
+.diff-badge.diff-reorder { background: #fef3c7; color: #b45309; }
+
+/* Subtle highlight on newly-added (unsaved) rows */
+.locarno-main.is-new > .locarno-row,
+.locarno-row.locarno-sub.is-new { background: #ecfdf5; }
+
+/* Confirmation dialog (replaces window.confirm across the admin panel) */
+.confirm-dialog { text-align: left; max-width: 460px; width: calc(100% - 2rem); }
+.confirm-title { margin: 0 0 0.75rem; font-size: 1.1rem; color: var(--text-primary); }
+.confirm-body { margin-bottom: 1.1rem; max-height: 45vh; overflow-y: auto; }
+.confirm-lead { margin: 0 0 0.5rem; color: var(--text-secondary); font-size: 0.92rem; line-height: 1.4; }
+.confirm-warn {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+}
+.confirm-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+/* The dialog's own buttons override the generic .modal button reset */
+.confirm-dialog .btn-primary { background: var(--color-primary); color: #fff; border: 0; }
+.confirm-dialog .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.confirm-dialog .btn-delete {
+  background: var(--color-danger) !important;
+  color: #fff !important;
+  border: 0 !important;
+}
+.confirm-dialog .btn-delete:hover:not(:disabled) { filter: brightness(0.93); }

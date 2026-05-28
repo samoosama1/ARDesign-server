@@ -14,6 +14,7 @@ go straight to the DB) to keep intent explicit if memoization ever returns.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data import locarno as locarno_cache
@@ -21,6 +22,7 @@ from app.db.session import get_db
 from app.models.locarno import LocarnoMainClassRow, LocarnoSubclassRow
 from app.models.patent import Patent
 from app.schemas.admin import (
+    LocarnoTreeUpdate,
     MainClassCreate,
     MainClassOut,
     MainClassUpdate,
@@ -45,6 +47,132 @@ async def _designs_using(db: AsyncSession, *, main: str | None = None, subs: lis
     return (
         await db.execute(select(func.count()).select_from(Patent).where(or_(*conditions)))
     ).scalar_one()
+
+
+# -- Whole-tree transactional save ---------------------------------------------
+
+@router.put("/tree", status_code=status.HTTP_200_OK)
+async def save_tree(body: LocarnoTreeUpdate, db: AsyncSession = Depends(get_db)):
+    """Apply the admin's complete desired tree in one transaction: inserts,
+    label/number edits, and reordering by list position, plus deletes for any
+    entry the payload drops. Entry identity is `value`. Deletes are refused
+    (409) if any design still references the removed main/subclass — the whole
+    save is rejected, never partially applied.
+
+    Subclasses cannot be moved between main classes here (the editor never
+    produces that), so a subclass changing parents is rejected (422) rather
+    than silently repointed."""
+    # 1. Validate payload self-consistency.
+    main_values = [m.value for m in body.main_classes]
+    if len(main_values) != len(set(main_values)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Duplicate main class value in payload.")
+    numbers = [m.number for m in body.main_classes]
+    if len(numbers) != len(set(numbers)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Duplicate main class number in payload.")
+
+    desired_sub_parent: dict[str, str] = {}
+    for m in body.main_classes:
+        for s in m.subclasses:
+            if s.value in desired_sub_parent:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"Subclass {s.value!r} appears more than once.",
+                )
+            desired_sub_parent[s.value] = m.value
+
+    # 2. Load current state.
+    cur_mains = {r.value: r for r in (await db.execute(select(LocarnoMainClassRow))).scalars().all()}
+    cur_subs = {r.value: r for r in (await db.execute(select(LocarnoSubclassRow))).scalars().all()}
+
+    # Reject parent moves (identity is value; a sub must stay under its main).
+    for sub_value, parent in desired_sub_parent.items():
+        existing = cur_subs.get(sub_value)
+        if existing is not None and existing.main_class_value != parent:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Subclass {sub_value!r} cannot be moved to a different main class.",
+            )
+
+    # 3. Compute deletes and refuse if any are still referenced by a design.
+    desired_main_set = set(main_values)
+    desired_sub_set = set(desired_sub_parent)
+    mains_to_delete = [v for v in cur_mains if v not in desired_main_set]
+    subs_to_delete = [v for v in cur_subs if v not in desired_sub_set]
+
+    blocked: list[str] = []
+    if mains_to_delete:
+        rows = (
+            await db.execute(
+                select(Patent.locarno_main_class, func.count())
+                .where(Patent.locarno_main_class.in_(mains_to_delete))
+                .group_by(Patent.locarno_main_class)
+            )
+        ).all()
+        blocked += [f"main class {v} ({n} design(s))" for v, n in rows]
+    if subs_to_delete:
+        rows = (
+            await db.execute(
+                select(Patent.locarno_subclass, func.count())
+                .where(Patent.locarno_subclass.in_(subs_to_delete))
+                .group_by(Patent.locarno_subclass)
+            )
+        ).all()
+        blocked += [f"subclass {v} ({n} design(s))" for v, n in rows]
+    if blocked:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Cannot save: still referenced by designs — " + "; ".join(blocked)
+            + ". Reclassify those designs first.",
+        )
+
+    # 4. Apply. Delete first (frees unique `number`s), then create, then update.
+    try:
+        for v in subs_to_delete:
+            await db.delete(cur_subs[v])
+        await db.flush()
+        for v in mains_to_delete:  # subclasses already gone, so RESTRICT FK is satisfied
+            await db.delete(cur_mains[v])
+        await db.flush()
+
+        for m_index, m in enumerate(body.main_classes):
+            main_row = cur_mains.get(m.value)
+            if main_row is None:
+                main_row = LocarnoMainClassRow(value=m.value, number=m.number, label=m.label, sort_index=m_index)
+                db.add(main_row)
+            else:
+                main_row.number = m.number
+                main_row.label = m.label
+                main_row.sort_index = m_index
+            await db.flush()  # ensure the main exists before its subclasses reference it
+
+            for s_index, s in enumerate(m.subclasses):
+                sub_row = cur_subs.get(s.value)
+                if sub_row is None:
+                    db.add(LocarnoSubclassRow(
+                        value=s.value, main_class_value=m.value, label=s.label,
+                        locarno_id=s.locarno_id, sort_index=s_index,
+                    ))
+                else:
+                    sub_row.label = s.label
+                    sub_row.sort_index = s_index
+                    if s.locarno_id is not None:  # never clear an existing id on edit
+                        sub_row.locarno_id = s.locarno_id
+
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Save failed a uniqueness constraint — most likely a main class number "
+            "is already taken. Check the numbers and try again.",
+        )
+    locarno_cache.invalidate()
+    return {
+        "main_classes": len(body.main_classes),
+        "subclasses": len(desired_sub_parent),
+        "deleted_main_classes": len(mains_to_delete),
+        "deleted_subclasses": len(subs_to_delete),
+    }
 
 
 # -- Main classes --------------------------------------------------------------

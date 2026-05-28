@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
+import ConfirmDialog from './ConfirmDialog'
 
 async function readError(res, fallback) {
   try {
@@ -17,7 +18,8 @@ export default function AdminUsers() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [busyId, setBusyId] = useState(null)
+  const [pending, setPending] = useState(null) // { title, message, confirmLabel, danger, run }
+  const [acting, setActing] = useState(false)
 
   const load = useCallback(async (search) => {
     setLoading(true)
@@ -37,48 +39,78 @@ export default function AdminUsers() {
 
   useEffect(() => { load('') }, [load])
 
-  async function patchUser(id, body, label) {
-    if (!window.confirm(`${label}?`)) return
-    setBusyId(id)
+  async function runPending() {
+    if (!pending) return
+    setActing(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/admin/users/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(await readError(res, 'Update failed'))
+      await pending.run()
+      setPending(null)
       await load(q)
     } catch (e) {
       setError(e.message)
+      setPending(null)
     } finally {
-      setBusyId(null)
+      setActing(false)
     }
   }
 
-  async function deleteUser(u) {
-    if (!window.confirm(
-      `Delete user "${u.username}" and all ${u.patent_count} of their design(s)? This cannot be undone.`
-    )) return
-    setBusyId(u.id)
-    setError(null)
-    try {
-      const res = await apiFetch(`/api/admin/users/${u.id}`, { method: 'DELETE' })
-      if (!res.ok && res.status !== 204) throw new Error(await readError(res, 'Delete failed'))
-      await load(q)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusyId(null)
-    }
+  function confirmRole(u, role) {
+    const verb = role === 'ADMIN' ? 'Promote' : 'Demote'
+    setPending({
+      title: `${verb} ${u.username}?`,
+      message: role === 'ADMIN'
+        ? `${u.username} will gain full admin access.`
+        : `${u.username} will lose admin access.`,
+      confirmLabel: verb,
+      danger: role !== 'ADMIN',
+      run: async () => {
+        const res = await apiFetch(`/api/admin/users/${u.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role }),
+        })
+        if (!res.ok) throw new Error(await readError(res, 'Update failed'))
+      },
+    })
+  }
+
+  function confirmActive(u) {
+    const next = !u.is_active
+    setPending({
+      title: `${next ? 'Activate' : 'Deactivate'} ${u.username}?`,
+      message: next
+        ? `${u.username} will be able to sign in again.`
+        : `${u.username} will be signed out and blocked from the API immediately.`,
+      confirmLabel: next ? 'Activate' : 'Deactivate',
+      danger: !next,
+      run: async () => {
+        const res = await apiFetch(`/api/admin/users/${u.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: next }),
+        })
+        if (!res.ok) throw new Error(await readError(res, 'Update failed'))
+      },
+    })
+  }
+
+  function confirmDelete(u) {
+    setPending({
+      title: `Delete ${u.username}?`,
+      message: `This permanently deletes the user and all ${u.patent_count} of their design(s), including files on disk. This cannot be undone.`,
+      confirmLabel: 'Delete user',
+      danger: true,
+      run: async () => {
+        const res = await apiFetch(`/api/admin/users/${u.id}`, { method: 'DELETE' })
+        if (!res.ok && res.status !== 204) throw new Error(await readError(res, 'Delete failed'))
+      },
+    })
   }
 
   return (
     <section className="admin-section">
-      <form
-        className="admin-search"
-        onSubmit={(e) => { e.preventDefault(); load(q) }}
-      >
+      <form className="admin-search" onSubmit={(e) => { e.preventDefault(); load(q) }}>
         <input
           type="text"
           placeholder="Search username or email…"
@@ -102,7 +134,6 @@ export default function AdminUsers() {
           <tbody>
             {users.map((u) => {
               const isSelf = u.id === me?.id
-              const disabled = busyId === u.id || isSelf
               return (
                 <tr key={u.id}>
                   <td>{u.id}</td>
@@ -114,22 +145,14 @@ export default function AdminUsers() {
                   <td>{new Date(u.date_joined).toLocaleDateString()}</td>
                   <td className="admin-row-actions">
                     {u.role === 'ADMIN' ? (
-                      <button disabled={disabled}
-                        onClick={() => patchUser(u.id, { role: 'USER' }, `Demote ${u.username} to USER`)}>
-                        Demote
-                      </button>
+                      <button disabled={isSelf} onClick={() => confirmRole(u, 'USER')}>Demote</button>
                     ) : (
-                      <button disabled={disabled}
-                        onClick={() => patchUser(u.id, { role: 'ADMIN' }, `Promote ${u.username} to ADMIN`)}>
-                        Promote
-                      </button>
+                      <button disabled={isSelf} onClick={() => confirmRole(u, 'ADMIN')}>Promote</button>
                     )}
-                    <button disabled={disabled}
-                      onClick={() => patchUser(u.id, { is_active: !u.is_active },
-                        `${u.is_active ? 'Deactivate' : 'Activate'} ${u.username}`)}>
+                    <button disabled={isSelf} onClick={() => confirmActive(u)}>
                       {u.is_active ? 'Deactivate' : 'Activate'}
                     </button>
-                    <button className="btn-delete" disabled={disabled} onClick={() => deleteUser(u)}>
+                    <button className="btn-delete" disabled={isSelf} onClick={() => confirmDelete(u)}>
                       Delete
                     </button>
                   </td>
@@ -142,6 +165,18 @@ export default function AdminUsers() {
           </tbody>
         </table>
       )}
+
+      <ConfirmDialog
+        open={!!pending}
+        title={pending?.title}
+        confirmLabel={pending?.confirmLabel}
+        danger={pending?.danger}
+        busy={acting}
+        onConfirm={runPending}
+        onCancel={() => setPending(null)}
+      >
+        {pending?.message && <p className="confirm-lead">{pending.message}</p>}
+      </ConfirmDialog>
     </section>
   )
 }

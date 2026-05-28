@@ -100,3 +100,28 @@ class SubclassOut(BaseModel):
 class ReorderRequest(BaseModel):
     """Ordered list of entry `value`s; the server rewrites sort_index to match."""
     ordered_values: list[str] = Field(min_length=1)
+
+
+# -- Locarno: whole-tree transactional update ----------------------------------
+
+class TreeSubclassInput(BaseModel):
+    value: str = Field(min_length=1, max_length=255)
+    label: str = Field(min_length=1, max_length=512)
+    # Position in the list implies sort_index; omitting locarno_id preserves the
+    # existing value (it is never cleared by an edit).
+    locarno_id: int | None = None
+
+
+class TreeMainClassInput(BaseModel):
+    value: str = Field(min_length=1, max_length=32)
+    number: int
+    label: str = Field(min_length=1, max_length=255)
+    subclasses: list[TreeSubclassInput] = Field(default_factory=list)
+
+
+class LocarnoTreeUpdate(BaseModel):
+    """Desired end-state of the whole tree. The server diffs it against the DB
+    and applies inserts/updates/deletes in one transaction. List order is the
+    sort order. Entry identity is `value` (immutable); a changed label is a
+    rename, a missing value is a delete, a new value is an insert."""
+    main_classes: list[TreeMainClassInput] = Field(default_factory=list)

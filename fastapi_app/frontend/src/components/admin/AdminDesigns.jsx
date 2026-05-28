@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import ConfirmDialog from './ConfirmDialog'
 
 async function readError(res, fallback) {
   try {
@@ -15,7 +16,8 @@ export default function AdminDesigns() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [busyId, setBusyId] = useState(null)
+  const [pending, setPending] = useState(null) // the design awaiting delete confirmation
+  const [acting, setActing] = useState(false)
 
   const load = useCallback(async (search) => {
     setLoading(true)
@@ -35,20 +37,20 @@ export default function AdminDesigns() {
 
   useEffect(() => { load('') }, [load])
 
-  async function deleteDesign(d) {
-    if (!window.confirm(
-      `Delete design "${d.model_filename || d.id}" by ${d.owner_username}? This removes its files too and cannot be undone.`
-    )) return
-    setBusyId(d.id)
+  async function runDelete() {
+    if (!pending) return
+    setActing(true)
     setError(null)
     try {
-      const res = await apiFetch(`/api/admin/patents/${d.id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/admin/patents/${pending.id}`, { method: 'DELETE' })
       if (!res.ok && res.status !== 204) throw new Error(await readError(res, 'Delete failed'))
+      setPending(null)
       await load(q)
     } catch (e) {
       setError(e.message)
+      setPending(null)
     } finally {
-      setBusyId(null)
+      setActing(false)
     }
   }
 
@@ -91,9 +93,7 @@ export default function AdminDesigns() {
                 <td>{d.locarno_main_class || '—'}{d.locarno_subclass ? ` / ${d.locarno_subclass}` : ''}</td>
                 <td>{new Date(d.uploaded_at).toLocaleDateString()}</td>
                 <td className="admin-row-actions">
-                  <button className="btn-delete" disabled={busyId === d.id} onClick={() => deleteDesign(d)}>
-                    Delete
-                  </button>
+                  <button className="btn-delete" onClick={() => setPending(d)}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -103,6 +103,23 @@ export default function AdminDesigns() {
           </tbody>
         </table>
       )}
+
+      <ConfirmDialog
+        open={!!pending}
+        title="Delete design?"
+        confirmLabel="Delete design"
+        danger
+        busy={acting}
+        onConfirm={runDelete}
+        onCancel={() => setPending(null)}
+      >
+        {pending && (
+          <p className="confirm-lead">
+            Delete “{pending.model_filename || pending.id}” by {pending.owner_username}?
+            This removes its files too and cannot be undone.
+          </p>
+        )}
+      </ConfirmDialog>
     </section>
   )
 }

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { clearLocarnoTreeCache } from '../../hooks/useLocarnoTree'
+import ConfirmDialog from './ConfirmDialog'
 
 async function readError(res, fallback) {
   try {
@@ -11,26 +12,133 @@ async function readError(res, fallback) {
   }
 }
 
+// ---- shape helpers -----------------------------------------------------------
+
+// Normalize the /api/locarno payload into a flat, editable working tree where
+// list order *is* the sort order (the save endpoint reads sort_index from it).
+function fromApi(tree) {
+  return {
+    mains: (tree?.main_classes || []).map((m) => ({
+      value: m.value,
+      number: m.number,
+      label: m.label,
+      subclasses: (tree?.subclasses_by_main?.[m.value] || []).map((s) => ({
+        value: s.value,
+        label: s.label,
+      })),
+    })),
+  }
+}
+
+const clone = (x) => JSON.parse(JSON.stringify(x))
+const byValue = (arr) => Object.fromEntries((arr || []).map((x) => [x.value, x]))
+
+function toPayload(draft) {
+  return {
+    main_classes: draft.mains.map((m) => ({
+      value: m.value,
+      number: m.number,
+      label: m.label,
+      subclasses: m.subclasses.map((s) => ({ value: s.value, label: s.label })),
+    })),
+  }
+}
+
+// Compute the human-readable change list between the loaded tree and the draft.
+function diffTree(orig, draft) {
+  if (!orig || !draft) return []
+  const out = []
+  const oM = byValue(orig.mains)
+  const dM = byValue(draft.mains)
+
+  draft.mains.forEach((m) => {
+    const o = oM[m.value]
+    if (!o) {
+      out.push({ type: 'add', text: `Add class ${m.number} — ${m.label}` })
+      m.subclasses.forEach((s) =>
+        out.push({ type: 'add', text: `Add subclass “${s.label}”`, parent: m.label }))
+      return
+    }
+    if (o.label !== m.label || o.number !== m.number) {
+      const bits = []
+      if (o.label !== m.label) bits.push(`“${o.label}” → “${m.label}”`)
+      if (o.number !== m.number) bits.push(`no. ${o.number} → ${m.number}`)
+      out.push({ type: 'edit', text: `Edit class ${bits.join(', ')}` })
+    }
+    const oS = byValue(o.subclasses)
+    const dS = byValue(m.subclasses)
+    m.subclasses.forEach((s) => {
+      const os = oS[s.value]
+      if (!os) out.push({ type: 'add', text: `Add subclass “${s.label}”`, parent: m.label })
+      else if (os.label !== s.label)
+        out.push({ type: 'edit', text: `Rename subclass “${os.label}” → “${s.label}”`, parent: m.label })
+    })
+    o.subclasses.forEach((s) => {
+      if (!dS[s.value]) out.push({ type: 'remove', text: `Remove subclass “${s.label}”`, parent: m.label })
+    })
+    const cO = o.subclasses.map((s) => s.value).filter((v) => dS[v])
+    const cD = m.subclasses.map((s) => s.value).filter((v) => oS[v])
+    if (cO.join('|') !== cD.join('|'))
+      out.push({ type: 'reorder', text: `Reorder subclasses in ${m.label}` })
+  })
+
+  orig.mains.forEach((m) => {
+    if (!dM[m.value])
+      out.push({ type: 'remove', text: `Remove class ${m.number} — ${m.label} (and its subclasses)` })
+  })
+
+  const cO = orig.mains.map((m) => m.value).filter((v) => dM[v])
+  const cD = draft.mains.map((m) => m.value).filter((v) => oM[v])
+  if (cO.join('|') !== cD.join('|')) out.push({ type: 'reorder', text: 'Reorder main classes' })
+
+  return out
+}
+
+const TYPE_LABEL = { add: 'add', edit: 'edit', remove: 'remove', reorder: 'reorder' }
+
+function DiffList({ changes }) {
+  return (
+    <ul className="locarno-diff-list">
+      {changes.map((c, i) => (
+        <li key={i} className={`locarno-diff-item diff-${c.type}`}>
+          <span className={`diff-badge diff-${c.type}`}>{TYPE_LABEL[c.type]}</span>
+          <span className="diff-text">
+            {c.text}
+            {c.parent && <span className="diff-parent"> · in {c.parent}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// ---- component ---------------------------------------------------------------
+
 export default function AdminLocarno() {
-  const [tree, setTree] = useState(null)
+  const [original, setOriginal] = useState(null)
+  const [draft, setDraft] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [expanded, setExpanded] = useState({})
 
-  // Inline edit + add form state.
   const [editing, setEditing] = useState(null) // { kind: 'main'|'sub', value }
   const [editLabel, setEditLabel] = useState('')
   const [newMain, setNewMain] = useState({ value: '', number: '', label: '' })
-  const [newSub, setNewSub] = useState({}) // keyed by main value -> { value, label }
+  const [newSub, setNewSub] = useState({}) // mainValue -> { value, label }
 
-  // Always fetch fresh (bypassing the session cache) so the editor reflects the DB.
+  const [showSave, setShowSave] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const res = await apiFetch('/api/locarno')
       if (!res.ok) throw new Error(await readError(res, 'Failed to load Locarno tree'))
-      setTree(await res.json())
+      const normalized = fromApi(await res.json())
+      setOriginal(normalized)
+      setDraft(clone(normalized))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -40,23 +148,38 @@ export default function AdminLocarno() {
 
   useEffect(() => { load() }, [load])
 
-  // Run a mutation, then refresh the editor and invalidate the app-wide cache.
-  async function mutate(method, url, body) {
-    setError(null)
-    try {
-      const res = await apiFetch(url, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      })
-      if (!res.ok && res.status !== 204) throw new Error(await readError(res, 'Operation failed'))
-      clearLocarnoTreeCache()
-      await load()
-      return true
-    } catch (e) {
-      setError(e.message)
-      return false
-    }
+  const diff = useMemo(() => diffTree(original, draft), [original, draft])
+  const dirty = diff.length > 0
+  const origMains = useMemo(() => byValue(original?.mains), [original])
+
+  // Apply a local edit to the draft (no network).
+  const edit = useCallback((mutator) => {
+    setDraft((prev) => {
+      const next = clone(prev)
+      mutator(next)
+      return next
+    })
+  }, [])
+
+  function findMain(tree, value) {
+    return tree.mains.find((m) => m.value === value)
+  }
+
+  function reorderMains(index, dir) {
+    const j = index + dir
+    edit((t) => {
+      if (j < 0 || j >= t.mains.length) return
+      ;[t.mains[index], t.mains[j]] = [t.mains[j], t.mains[index]]
+    })
+  }
+
+  function reorderSubs(mainValue, index, dir) {
+    edit((t) => {
+      const m = findMain(t, mainValue)
+      const j = index + dir
+      if (!m || j < 0 || j >= m.subclasses.length) return
+      ;[m.subclasses[index], m.subclasses[j]] = [m.subclasses[j], m.subclasses[index]]
+    })
   }
 
   function startEdit(kind, value, label) {
@@ -64,62 +187,139 @@ export default function AdminLocarno() {
     setEditLabel(label)
   }
 
-  async function saveEdit() {
-    const url = editing.kind === 'main'
-      ? `/api/admin/locarno/main-classes/${encodeURIComponent(editing.value)}`
-      : `/api/admin/locarno/subclasses/${encodeURIComponent(editing.value)}`
-    if (await mutate('PATCH', url, { label: editLabel.trim() })) setEditing(null)
+  function saveEdit(mainValue) {
+    const label = editLabel.trim()
+    if (!label) return
+    edit((t) => {
+      if (editing.kind === 'main') {
+        const m = findMain(t, editing.value)
+        if (m) m.label = label
+      } else {
+        const m = findMain(t, mainValue)
+        const s = m?.subclasses.find((x) => x.value === editing.value)
+        if (s) s.label = label
+      }
+    })
+    setEditing(null)
   }
 
-  async function reorderMains(index, dir) {
-    const values = tree.main_classes.map((m) => m.value)
-    const j = index + dir
-    if (j < 0 || j >= values.length) return
-    ;[values[index], values[j]] = [values[j], values[index]]
-    await mutate('PUT', '/api/admin/locarno/main-classes/order', { ordered_values: values })
+  function removeMain(value) {
+    edit((t) => { t.mains = t.mains.filter((m) => m.value !== value) })
   }
 
-  async function reorderSubs(mainValue, index, dir) {
-    const values = (tree.subclasses_by_main[mainValue] || []).map((s) => s.value)
-    const j = index + dir
-    if (j < 0 || j >= values.length) return
-    ;[values[index], values[j]] = [values[j], values[index]]
-    await mutate('PUT',
-      `/api/admin/locarno/main-classes/${encodeURIComponent(mainValue)}/subclasses/order`,
-      { ordered_values: values })
+  function removeSub(mainValue, value) {
+    edit((t) => {
+      const m = findMain(t, mainValue)
+      if (m) m.subclasses = m.subclasses.filter((s) => s.value !== value)
+    })
   }
 
-  async function addMain(e) {
+  function addMain(e) {
     e.preventDefault()
+    setError(null)
+    const value = newMain.value.trim()
+    const label = newMain.label.trim()
     const number = parseInt(newMain.number, 10)
-    if (!newMain.value.trim() || !newMain.label.trim() || Number.isNaN(number)) {
+    if (!value || !label || Number.isNaN(number)) {
       setError('Main class needs a value, a numeric number, and a label.')
       return
     }
-    if (await mutate('POST', '/api/admin/locarno/main-classes', {
-      value: newMain.value.trim(), number, label: newMain.label.trim(),
-    })) setNewMain({ value: '', number: '', label: '' })
+    if (draft.mains.some((m) => m.value === value)) {
+      setError(`Main class value “${value}” already exists.`)
+      return
+    }
+    if (draft.mains.some((m) => m.number === number)) {
+      setError(`Main class number ${number} is already used.`)
+      return
+    }
+    edit((t) => { t.mains.push({ value, number, label, subclasses: [] }) })
+    setExpanded((p) => ({ ...p, [value]: true }))
+    setNewMain({ value: '', number: '', label: '' })
   }
 
-  async function addSub(e, mainValue) {
+  function addSub(e, mainValue) {
     e.preventDefault()
-    const draft = newSub[mainValue] || {}
-    if (!draft.value?.trim() || !draft.label?.trim()) {
+    setError(null)
+    const draftSub = newSub[mainValue] || {}
+    const value = (draftSub.value || '').trim()
+    const label = (draftSub.label || '').trim()
+    if (!value || !label) {
       setError('Subclass needs a value and a label.')
       return
     }
-    if (await mutate('POST', '/api/admin/locarno/subclasses', {
-      value: draft.value.trim(), main_class_value: mainValue, label: draft.label.trim(),
-    })) setNewSub((prev) => ({ ...prev, [mainValue]: { value: '', label: '' } }))
+    const exists = draft.mains.some((m) => m.subclasses.some((s) => s.value === value))
+    if (exists) {
+      setError(`Subclass value “${value}” already exists.`)
+      return
+    }
+    edit((t) => {
+      const m = findMain(t, mainValue)
+      if (m) m.subclasses.push({ value, label })
+    })
+    setNewSub((prev) => ({ ...prev, [mainValue]: { value: '', label: '' } }))
   }
 
-  if (loading && !tree) return <div className="loading">Loading…</div>
+  function discard() {
+    setDraft(clone(original))
+    setEditing(null)
+    setNewMain({ value: '', number: '', label: '' })
+    setNewSub({})
+    setError(null)
+  }
 
-  const mains = tree?.main_classes || []
+  async function commit() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await apiFetch('/api/admin/locarno/tree', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toPayload(draft)),
+      })
+      if (!res.ok) throw new Error(await readError(res, 'Save failed'))
+      clearLocarnoTreeCache()
+      setShowSave(false)
+      await load() // reload canonical state from server
+    } catch (e) {
+      setSaveError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removalCount = diff.filter((c) => c.type === 'remove').length
+
+  if (loading && !draft) return <div className="loading">Loading…</div>
+
+  const mains = draft?.mains || []
 
   return (
     <section className="admin-section admin-locarno">
+      {/* Sticky action bar: nothing reaches the DB until Save is pressed. */}
+      <div className={`locarno-savebar${dirty ? ' is-dirty' : ''}`}>
+        <span className="locarno-savebar-status">
+          {dirty
+            ? `${diff.length} pending change${diff.length === 1 ? '' : 's'} — not saved yet`
+            : 'No pending changes'}
+        </span>
+        <div className="locarno-savebar-actions">
+          <button className="btn-secondary" onClick={discard} disabled={!dirty || saving}>
+            Discard
+          </button>
+          <button className="btn-primary" onClick={() => { setSaveError(null); setShowSave(true) }} disabled={!dirty || saving}>
+            Save changes
+          </button>
+        </div>
+      </div>
+
       {error && <div className="admin-error">{error}</div>}
+
+      {dirty && (
+        <div className="locarno-diff">
+          <h4 className="locarno-diff-title">Pending changes</h4>
+          <DiffList changes={diff} />
+        </div>
+      )}
 
       <form className="admin-add-row" onSubmit={addMain}>
         <input placeholder="value (e.g. SINIF_1)" value={newMain.value}
@@ -133,11 +333,14 @@ export default function AdminLocarno() {
 
       <ul className="locarno-tree">
         {mains.map((m, i) => {
-          const subs = tree.subclasses_by_main[m.value] || []
           const isOpen = !!expanded[m.value]
           const subDraft = newSub[m.value] || { value: '', label: '' }
+          const o = origMains[m.value]
+          const isNew = !o
+          const isEdited = o && (o.label !== m.label || o.number !== m.number)
+          const subsByOrig = byValue(o?.subclasses)
           return (
-            <li key={m.value} className="locarno-main">
+            <li key={m.value} className={`locarno-main${isNew ? ' is-new' : ''}`}>
               <div className="locarno-row">
                 <button className="locarno-toggle"
                   onClick={() => setExpanded((p) => ({ ...p, [m.value]: !p[m.value] }))}>
@@ -147,22 +350,22 @@ export default function AdminLocarno() {
                 {editing?.kind === 'main' && editing.value === m.value ? (
                   <>
                     <input className="locarno-edit" value={editLabel}
-                      onChange={(e) => setEditLabel(e.target.value)} autoFocus />
-                    <button onClick={saveEdit}>Save</button>
-                    <button onClick={() => setEditing(null)}>Cancel</button>
+                      onChange={(e) => setEditLabel(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && saveEdit()} autoFocus />
+                    <button className="btn-secondary" onClick={() => saveEdit()}>Done</button>
+                    <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
                   </>
                 ) : (
                   <>
                     <span className="locarno-label">{m.label}</span>
                     <code className="locarno-value">{m.value}</code>
+                    {isNew && <span className="diff-badge diff-add">new</span>}
+                    {isEdited && <span className="diff-badge diff-edit">edited</span>}
                     <span className="locarno-actions">
                       <button onClick={() => reorderMains(i, -1)} disabled={i === 0} title="Move up">↑</button>
                       <button onClick={() => reorderMains(i, 1)} disabled={i === mains.length - 1} title="Move down">↓</button>
                       <button onClick={() => startEdit('main', m.value, m.label)}>Rename</button>
-                      <button className="btn-delete"
-                        onClick={() => mutate('DELETE', `/api/admin/locarno/main-classes/${encodeURIComponent(m.value)}`)}>
-                        Delete
-                      </button>
+                      <button className="btn-delete" onClick={() => removeMain(m.value)}>Remove</button>
                     </span>
                   </>
                 )}
@@ -170,32 +373,37 @@ export default function AdminLocarno() {
 
               {isOpen && (
                 <ul className="locarno-subs">
-                  {subs.map((s, j) => (
-                    <li key={s.value} className="locarno-row locarno-sub">
-                      {editing?.kind === 'sub' && editing.value === s.value ? (
-                        <>
-                          <input className="locarno-edit" value={editLabel}
-                            onChange={(e) => setEditLabel(e.target.value)} autoFocus />
-                          <button onClick={saveEdit}>Save</button>
-                          <button onClick={() => setEditing(null)}>Cancel</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="locarno-label">{s.label}</span>
-                          <code className="locarno-value">{s.value}</code>
-                          <span className="locarno-actions">
-                            <button onClick={() => reorderSubs(m.value, j, -1)} disabled={j === 0} title="Move up">↑</button>
-                            <button onClick={() => reorderSubs(m.value, j, 1)} disabled={j === subs.length - 1} title="Move down">↓</button>
-                            <button onClick={() => startEdit('sub', s.value, s.label)}>Rename</button>
-                            <button className="btn-delete"
-                              onClick={() => mutate('DELETE', `/api/admin/locarno/subclasses/${encodeURIComponent(s.value)}`)}>
-                              Delete
-                            </button>
-                          </span>
-                        </>
-                      )}
-                    </li>
-                  ))}
+                  {m.subclasses.map((s, j) => {
+                    const os = subsByOrig[s.value]
+                    const subNew = !os
+                    const subEdited = os && os.label !== s.label
+                    return (
+                      <li key={s.value} className={`locarno-row locarno-sub${subNew ? ' is-new' : ''}`}>
+                        {editing?.kind === 'sub' && editing.value === s.value ? (
+                          <>
+                            <input className="locarno-edit" value={editLabel}
+                              onChange={(e) => setEditLabel(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEdit(m.value)} autoFocus />
+                            <button className="btn-secondary" onClick={() => saveEdit(m.value)}>Done</button>
+                            <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="locarno-label">{s.label}</span>
+                            <code className="locarno-value">{s.value}</code>
+                            {subNew && <span className="diff-badge diff-add">new</span>}
+                            {subEdited && <span className="diff-badge diff-edit">edited</span>}
+                            <span className="locarno-actions">
+                              <button onClick={() => reorderSubs(m.value, j, -1)} disabled={j === 0} title="Move up">↑</button>
+                              <button onClick={() => reorderSubs(m.value, j, 1)} disabled={j === m.subclasses.length - 1} title="Move down">↓</button>
+                              <button onClick={() => startEdit('sub', s.value, s.label)}>Rename</button>
+                              <button className="btn-delete" onClick={() => removeSub(m.value, s.value)}>Remove</button>
+                            </span>
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
                   <li className="locarno-row locarno-sub">
                     <form className="admin-add-row" onSubmit={(e) => addSub(e, m.value)}>
                       <input placeholder="subclass value" value={subDraft.value}
@@ -212,6 +420,28 @@ export default function AdminLocarno() {
         })}
         {mains.length === 0 && <li className="admin-empty">No Locarno classes.</li>}
       </ul>
+
+      <ConfirmDialog
+        open={showSave}
+        title="Save Locarno changes?"
+        confirmLabel={`Save ${diff.length} change${diff.length === 1 ? '' : 's'}`}
+        danger={removalCount > 0}
+        busy={saving}
+        onConfirm={commit}
+        onCancel={() => !saving && setShowSave(false)}
+      >
+        <p className="confirm-lead">
+          These changes are applied together in one transaction. Review before saving:
+        </p>
+        <DiffList changes={diff} />
+        {removalCount > 0 && (
+          <p className="confirm-warn">
+            {removalCount} removal{removalCount === 1 ? '' : 's'} included. A removal is
+            refused if any design still uses that class or subclass.
+          </p>
+        )}
+        {saveError && <div className="admin-error">{saveError}</div>}
+      </ConfirmDialog>
     </section>
   )
 }
