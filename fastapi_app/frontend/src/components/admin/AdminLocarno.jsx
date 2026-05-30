@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { clearLocarnoTreeCache } from '../../hooks/useLocarnoTree'
 import ConfirmDialog from './ConfirmDialog'
@@ -12,10 +12,10 @@ async function readError(res, fallback) {
   }
 }
 
-// ---- shape helpers -----------------------------------------------------------
+// ---- normalization ----------------------------------------------------------
 
-// Normalize the /api/locarno payload into a flat, editable working tree where
-// list order *is* the sort order (the save endpoint reads sort_index from it).
+// The PUT /tree endpoint reads sort by *list position*, so the working tree is
+// kept as ordered arrays the whole time. Identity is `value` (primary key).
 function fromApi(tree) {
   return {
     mains: (tree?.main_classes || []).map((m) => ({
@@ -44,247 +44,413 @@ function toPayload(draft) {
   }
 }
 
-// True iff the two lists share at least one value but in a different relative order.
-function orderChanged(aArr, bArr) {
-  const aSet = new Set(aArr)
-  const bSet = new Set(bArr)
-  const aCommon = aArr.filter((v) => bSet.has(v))
-  const bCommon = bArr.filter((v) => aSet.has(v))
-  return aCommon.join('|') !== bCommon.join('|')
+// Two arrays "share order" iff their common items appear in the same relative
+// sequence. Used to detect reorder independently of inserts/deletes.
+function sameOrderOfCommon(a, b) {
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  const ca = a.filter((v) => bSet.has(v))
+  const cb = b.filter((v) => aSet.has(v))
+  return ca.join('|') === cb.join('|')
 }
 
-// Compute the human-readable change list shown inside the save dialog.
-function diffTree(orig, draft) {
-  if (!orig || !draft) return []
-  const out = []
+// ---- structured diff --------------------------------------------------------
+// Built once per draft change and consumed by both the on-page Changes section
+// and the save-confirm dialog. Each change has enough info for per-change undo.
+
+function structuredDiff(orig, draft) {
+  if (!orig || !draft) return { changes: [], count: 0, removalCount: 0 }
+  const changes = []
   const oM = byValue(orig.mains)
   const dM = byValue(draft.mains)
+  const oIndex = new Map(orig.mains.map((m, i) => [m.value, i]))
 
+  // 1. Reordered mains (single change, affects the whole list)
+  if (!sameOrderOfCommon(orig.mains.map((m) => m.value), draft.mains.map((m) => m.value))) {
+    changes.push({
+      kind: 'reorderMains',
+      newOrder: draft.mains.filter((m) => oM[m.value]).map((m) => ({ number: m.number, label: m.label })),
+    })
+  }
+
+  // 2. Per-main changes, in draft order so the list reads top-to-bottom like the tree
   draft.mains.forEach((m) => {
     const o = oM[m.value]
     if (!o) {
-      out.push({ type: 'add', text: `Add class ${m.number} — ${m.label}` })
-      m.subclasses.forEach((s) =>
-        out.push({ type: 'add', text: `Add subclass “${s.label}”`, parent: m.label }))
+      // Whole new class — its subs are listed inside this block, no separate addSub events.
+      changes.push({
+        kind: 'addMain',
+        value: m.value,
+        number: m.number,
+        label: m.label,
+        subs: m.subclasses.map((s) => ({ value: s.value, label: s.label })),
+      })
       return
     }
     if (o.label !== m.label || o.number !== m.number) {
-      const bits = []
-      if (o.label !== m.label) bits.push(`“${o.label}” → “${m.label}”`)
-      if (o.number !== m.number) bits.push(`no. ${o.number} → ${m.number}`)
-      out.push({ type: 'edit', text: `Edit class ${bits.join(', ')}` })
+      changes.push({
+        kind: 'editMain',
+        value: m.value,
+        before: { number: o.number, label: o.label },
+        after: { number: m.number, label: m.label },
+      })
     }
+    // sub-level diff for this surviving main
     const oS = byValue(o.subclasses)
     const dS = byValue(m.subclasses)
     m.subclasses.forEach((s) => {
       const os = oS[s.value]
-      if (!os) out.push({ type: 'add', text: `Add subclass “${s.label}”`, parent: m.label })
+      if (!os) changes.push({ kind: 'addSub', mainValue: m.value, mainLabel: m.label, value: s.value, label: s.label })
       else if (os.label !== s.label)
-        out.push({ type: 'edit', text: `Rename subclass “${os.label}” → “${s.label}”`, parent: m.label })
+        changes.push({ kind: 'editSub', mainValue: m.value, mainLabel: m.label, value: s.value, before: os.label, after: s.label })
     })
     o.subclasses.forEach((s) => {
-      if (!dS[s.value]) out.push({ type: 'remove', text: `Remove subclass “${s.label}”`, parent: m.label })
+      if (!dS[s.value])
+        changes.push({ kind: 'removeSub', mainValue: m.value, mainLabel: m.label, value: s.value, label: s.label })
     })
-    if (orderChanged(o.subclasses.map((s) => s.value), m.subclasses.map((s) => s.value)))
-      out.push({ type: 'reorder', text: `Reorder subclasses in ${m.label}` })
+    if (!sameOrderOfCommon(o.subclasses.map((s) => s.value), m.subclasses.map((s) => s.value))) {
+      changes.push({
+        kind: 'reorderSubs',
+        mainValue: m.value,
+        mainLabel: m.label,
+        newOrder: m.subclasses.filter((s) => oS[s.value]).map((s) => s.label),
+      })
+    }
   })
 
+  // 3. Removed mains, at the bottom of the list (most destructive — easy to spot)
   orig.mains.forEach((m) => {
     if (!dM[m.value])
-      out.push({ type: 'remove', text: `Remove class ${m.number} — ${m.label} (and its subclasses)` })
+      changes.push({
+        kind: 'removeMain',
+        value: m.value,
+        number: m.number,
+        label: m.label,
+        subs: m.subclasses.map((s) => ({ value: s.value, label: s.label })),
+        originalIndex: oIndex.get(m.value),
+      })
   })
 
-  if (orderChanged(orig.mains.map((m) => m.value), draft.mains.map((m) => m.value)))
-    out.push({ type: 'reorder', text: 'Reorder main classes' })
-
-  return out
+  const removalCount = changes.filter((c) => c.kind === 'removeMain' || c.kind === 'removeSub').length
+  return { changes, count: changes.length, removalCount }
 }
 
-const TYPE_LABEL = { add: 'add', edit: 'edit', remove: 'remove', reorder: 'reorder' }
+// Returns a map: rowKey → 'add' | 'edit' for the small dot on the tree row.
+// (Reorder dots would be ambiguous per-row, so reorder lives only in the
+// Changes section, not on individual rows.)
+function buildRowMarkers(diff) {
+  const markers = {}
+  diff.changes.forEach((c) => {
+    if (c.kind === 'addMain') markers[`m:${c.value}`] = 'add'
+    if (c.kind === 'editMain') markers[`m:${c.value}`] = 'edit'
+    if (c.kind === 'addSub') markers[`s:${c.value}`] = 'add'
+    if (c.kind === 'editSub') markers[`s:${c.value}`] = 'edit'
+  })
+  return markers
+}
 
-function DiffList({ changes }) {
-  if (!changes.length) return <p className="confirm-lead">No changes.</p>
+// ---- change-block renderer (used on-page AND in the save dialog) ------------
+
+function ChangeBlock({ change, onUndo }) {
+  const { kind } = change
+  let kindLabel = ''
+  let body = null
+  let groupKind = 'edit'
+
+  if (kind === 'addMain') {
+    groupKind = 'add'
+    kindLabel = 'Added class'
+    body = (
+      <>
+        <strong>{change.number}</strong>  {change.label}  <code>{change.value}</code>
+        {change.subs.length > 0 && (
+          <ul>
+            {change.subs.map((s) => (
+              <li key={s.value}>{s.label} <code>{s.value}</code></li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  } else if (kind === 'removeMain') {
+    groupKind = 'remove'
+    kindLabel = 'Removed class'
+    body = (
+      <>
+        <strong>{change.number}</strong>  <span className="from">{change.label}</span>  <code>{change.value}</code>
+        {change.subs.length > 0 && (
+          <>
+            <div style={{ marginTop: '0.3rem', color: 'var(--text-muted)' }}>
+              Also removes {change.subs.length} subclass{change.subs.length === 1 ? '' : 'es'}:
+            </div>
+            <ul>
+              {change.subs.map((s) => (
+                <li key={s.value}><span className="from">{s.label}</span></li>
+              ))}
+            </ul>
+          </>
+        )}
+      </>
+    )
+  } else if (kind === 'editMain') {
+    groupKind = 'edit'
+    kindLabel = 'Edited class'
+    body = (
+      <>
+        {change.before.label !== change.after.label && (
+          <div><span className="from">{change.before.label}</span><span className="arrow">→</span><span className="to">{change.after.label}</span></div>
+        )}
+        {change.before.number !== change.after.number && (
+          <div>Number: <span className="from">{change.before.number}</span><span className="arrow">→</span><span className="to">{change.after.number}</span></div>
+        )}
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}><code>{change.value}</code></div>
+      </>
+    )
+  } else if (kind === 'addSub') {
+    groupKind = 'add'
+    kindLabel = `Added subclass in ${change.mainLabel}`
+    body = <>{change.label}  <code>{change.value}</code></>
+  } else if (kind === 'removeSub') {
+    groupKind = 'remove'
+    kindLabel = `Removed subclass from ${change.mainLabel}`
+    body = <><span className="from">{change.label}</span>  <code>{change.value}</code></>
+  } else if (kind === 'editSub') {
+    groupKind = 'edit'
+    kindLabel = `Renamed subclass in ${change.mainLabel}`
+    body = (
+      <>
+        <span className="from">{change.before}</span><span className="arrow">→</span><span className="to">{change.after}</span>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.25rem' }}><code>{change.value}</code></div>
+      </>
+    )
+  } else if (kind === 'reorderMains') {
+    groupKind = 'reorder'
+    kindLabel = 'Reordered main classes'
+    body = (
+      <>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '0.25rem' }}>New order:</div>
+        <div>{change.newOrder.map((m) => `${m.number} ${m.label}`).join(' · ')}</div>
+      </>
+    )
+  } else if (kind === 'reorderSubs') {
+    groupKind = 'reorder'
+    kindLabel = `Reordered subclasses in ${change.mainLabel}`
+    body = (
+      <>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '0.25rem' }}>New order:</div>
+        <div>{change.newOrder.join(' · ')}</div>
+      </>
+    )
+  }
+
   return (
-    <ul className="locarno-diff-list">
-      {changes.map((c, i) => (
-        <li key={i} className="locarno-diff-item">
-          <span className={`diff-badge diff-${c.type}`}>{TYPE_LABEL[c.type]}</span>
-          <span className="diff-text">
-            {c.text}
-            {c.parent && <span className="diff-parent"> · in {c.parent}</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className={`locarno-change-block kind-${groupKind}`}>
+      <div className="locarno-change-body">
+        <div className="locarno-change-kind">{kindLabel}</div>
+        {body}
+      </div>
+      {onUndo && <button className="locarno-undo" onClick={onUndo}>Undo</button>}
+    </div>
   )
 }
 
-// ---- component ---------------------------------------------------------------
+// ---- component --------------------------------------------------------------
 
 export default function AdminLocarno() {
   const [original, setOriginal] = useState(null)
   const [draft, setDraft] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [expanded, setExpanded] = useState({})
 
-  const [editing, setEditing] = useState(null) // { kind: 'main'|'sub', value }
+  const [expanded, setExpanded] = useState({})
+  const [selected, setSelected] = useState(null) // { kind:'main'|'sub', mainValue, value }
+  const [mode, setMode] = useState('view') // 'view' | 'rename' | 'addSub'
   const [editLabel, setEditLabel] = useState('')
+  const [newSub, setNewSub] = useState({ value: '', label: '' })
+
+  const [addingMain, setAddingMain] = useState(false)
   const [newMain, setNewMain] = useState({ value: '', number: '', label: '' })
-  const [newSub, setNewSub] = useState({}) // mainValue -> { value, label }
 
   const [showSave, setShowSave] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const res = await apiFetch('/api/locarno')
       if (!res.ok) throw new Error(await readError(res, 'Failed to load Locarno tree'))
       const normalized = fromApi(await res.json())
       setOriginal(normalized)
       setDraft(clone(normalized))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+      setSelected(null); setMode('view')
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  const diff = useMemo(() => diffTree(original, draft), [original, draft])
-  const dirty = diff.length > 0
+  const diff = useMemo(() => structuredDiff(original, draft), [original, draft])
+  const dirty = diff.count > 0
+  const markers = useMemo(() => buildRowMarkers(diff), [diff])
 
-  const origMains = useMemo(() => byValue(original?.mains), [original])
-  const draftMains = useMemo(() => byValue(draft?.mains), [draft])
-
-  const mainsReordered = useMemo(() => {
-    if (!original || !draft) return false
-    return orderChanged(original.mains.map((m) => m.value), draft.mains.map((m) => m.value))
-  }, [original, draft])
-
-  // Per-main subclass reorder lookup: { mainValue: true }.
-  const subsReordered = useMemo(() => {
-    const out = {}
-    if (!original || !draft) return out
-    original.mains.forEach((om) => {
-      const dm = draftMains[om.value]
-      if (!dm) return
-      if (orderChanged(om.subclasses.map((s) => s.value), dm.subclasses.map((s) => s.value)))
-        out[om.value] = true
-    })
-    return out
-  }, [original, draft, draftMains])
-
-  // Apply a local edit to the draft (no network).
-  const edit = useCallback((mutator) => {
-    setDraft((prev) => {
-      const next = clone(prev)
-      mutator(next)
-      return next
-    })
+  const editDraft = useCallback((mutator) => {
+    setDraft((prev) => { const next = clone(prev); mutator(next); return next })
   }, [])
+
+  // ---- low-level operations ------------------------------------------------
 
   const findMain = (t, v) => t.mains.find((m) => m.value === v)
 
-  function reorderMains(index, dir) {
-    edit((t) => {
-      const j = index + dir
-      if (j < 0 || j >= t.mains.length) return
-      ;[t.mains[index], t.mains[j]] = [t.mains[j], t.mains[index]]
+  function moveMain(value, dir) {
+    editDraft((t) => {
+      const i = t.mains.findIndex((m) => m.value === value)
+      const j = i + dir
+      if (i < 0 || j < 0 || j >= t.mains.length) return
+      ;[t.mains[i], t.mains[j]] = [t.mains[j], t.mains[i]]
     })
   }
-  function reorderSubs(mainValue, index, dir) {
-    edit((t) => {
-      const m = findMain(t, mainValue)
-      const j = index + dir
-      if (!m || j < 0 || j >= m.subclasses.length) return
-      ;[m.subclasses[index], m.subclasses[j]] = [m.subclasses[j], m.subclasses[index]]
+  function moveSub(mainValue, value, dir) {
+    editDraft((t) => {
+      const m = findMain(t, mainValue); if (!m) return
+      const i = m.subclasses.findIndex((s) => s.value === value)
+      const j = i + dir
+      if (i < 0 || j < 0 || j >= m.subclasses.length) return
+      ;[m.subclasses[i], m.subclasses[j]] = [m.subclasses[j], m.subclasses[i]]
     })
   }
-  function startEdit(kind, value, label) {
-    setEditing({ kind, value })
-    setEditLabel(label)
+  function removeSelected() {
+    if (!selected) return
+    if (selected.kind === 'main') {
+      editDraft((t) => { t.mains = t.mains.filter((m) => m.value !== selected.value) })
+    } else {
+      editDraft((t) => {
+        const m = findMain(t, selected.mainValue)
+        if (m) m.subclasses = m.subclasses.filter((s) => s.value !== selected.value)
+      })
+    }
+    setSelected(null); setMode('view')
   }
-  function saveEdit(mainValue) {
+  function commitRename() {
     const label = editLabel.trim()
-    if (!label) return
-    edit((t) => {
-      if (editing.kind === 'main') {
-        const m = findMain(t, editing.value)
-        if (m) m.label = label
+    if (!label || !selected) return
+    editDraft((t) => {
+      if (selected.kind === 'main') {
+        const m = findMain(t, selected.value); if (m) m.label = label
       } else {
-        const m = findMain(t, mainValue)
-        const s = m?.subclasses.find((x) => x.value === editing.value)
+        const m = findMain(t, selected.mainValue)
+        const s = m?.subclasses.find((x) => x.value === selected.value)
         if (s) s.label = label
       }
     })
-    setEditing(null)
+    setMode('view')
   }
-  function removeMain(value) {
-    edit((t) => { t.mains = t.mains.filter((m) => m.value !== value) })
+  function commitAddSub() {
+    const value = newSub.value.trim()
+    const label = newSub.label.trim()
+    if (!value || !label || !selected || selected.kind !== 'main') return
+    if (draft.mains.some((m) => m.subclasses.some((s) => s.value === value))) {
+      setError(`Subclass value “${value}” already exists.`); return
+    }
+    editDraft((t) => { const m = findMain(t, selected.value); if (m) m.subclasses.push({ value, label }) })
+    setMode('view'); setNewSub({ value: '', label: '' })
   }
-  function removeSub(mainValue, value) {
-    edit((t) => {
-      const m = findMain(t, mainValue)
-      if (m) m.subclasses = m.subclasses.filter((s) => s.value !== value)
-    })
-  }
-  function addMain(e) {
-    e.preventDefault()
-    setError(null)
+  function commitAddMain() {
     const value = newMain.value.trim()
     const label = newMain.label.trim()
     const number = parseInt(newMain.number, 10)
     if (!value || !label || Number.isNaN(number)) {
-      setError('Main class needs a value, a numeric number, and a label.')
-      return
+      setError('A main class needs a value, a numeric number, and a label.'); return
     }
-    if (draft.mains.some((m) => m.value === value)) {
-      setError(`Main class value “${value}” already exists.`)
-      return
-    }
-    if (draft.mains.some((m) => m.number === number)) {
-      setError(`Main class number ${number} is already used.`)
-      return
-    }
-    edit((t) => { t.mains.push({ value, number, label, subclasses: [] }) })
+    if (draft.mains.some((m) => m.value === value)) { setError(`Main class “${value}” already exists.`); return }
+    if (draft.mains.some((m) => m.number === number)) { setError(`Main class number ${number} is already used.`); return }
+    editDraft((t) => { t.mains.push({ value, number, label, subclasses: [] }) })
+    setAddingMain(false); setNewMain({ value: '', number: '', label: '' })
     setExpanded((p) => ({ ...p, [value]: true }))
-    setNewMain({ value: '', number: '', label: '' })
-  }
-  function addSub(e, mainValue) {
-    e.preventDefault()
+    setSelected({ kind: 'main', value }); setMode('view')
     setError(null)
-    const ds = newSub[mainValue] || {}
-    const value = (ds.value || '').trim()
-    const label = (ds.label || '').trim()
-    if (!value || !label) {
-      setError('Subclass needs a value and a label.')
-      return
-    }
-    if (draft.mains.some((m) => m.subclasses.some((s) => s.value === value))) {
-      setError(`Subclass value “${value}” already exists.`)
-      return
-    }
-    edit((t) => {
-      const m = findMain(t, mainValue)
-      if (m) m.subclasses.push({ value, label })
-    })
-    setNewSub((p) => ({ ...p, [mainValue]: { value: '', label: '' } }))
   }
+
+  // ---- per-change undo -----------------------------------------------------
+
+  function undoChange(c) {
+    setError(null)
+    if (c.kind === 'addMain') {
+      editDraft((t) => { t.mains = t.mains.filter((m) => m.value !== c.value) })
+    } else if (c.kind === 'removeMain') {
+      editDraft((t) => {
+        const restored = { value: c.value, number: c.number, label: c.label, subclasses: c.subs.map((s) => ({ ...s })) }
+        const at = Math.min(c.originalIndex ?? t.mains.length, t.mains.length)
+        t.mains.splice(at, 0, restored)
+      })
+    } else if (c.kind === 'editMain') {
+      editDraft((t) => {
+        const m = findMain(t, c.value); if (!m) return
+        m.label = c.before.label; m.number = c.before.number
+      })
+    } else if (c.kind === 'addSub') {
+      editDraft((t) => {
+        const m = findMain(t, c.mainValue); if (!m) return
+        m.subclasses = m.subclasses.filter((s) => s.value !== c.value)
+      })
+    } else if (c.kind === 'removeSub') {
+      // restore at end of parent's sub list (good enough — exact original index isn't tracked here)
+      editDraft((t) => {
+        const m = findMain(t, c.mainValue); if (!m) return
+        m.subclasses.push({ value: c.value, label: c.label })
+      })
+    } else if (c.kind === 'editSub') {
+      editDraft((t) => {
+        const m = findMain(t, c.mainValue); if (!m) return
+        const s = m.subclasses.find((x) => x.value === c.value); if (s) s.label = c.before
+      })
+    } else if (c.kind === 'reorderMains') {
+      // Restore the original order of mains that exist in both; append draft-only mains after.
+      editDraft((t) => {
+        const origOrder = original.mains.map((m) => m.value)
+        const draftSet = new Set(t.mains.map((m) => m.value))
+        const restored = []
+        origOrder.forEach((v) => { if (draftSet.has(v)) restored.push(findMain(t, v)) })
+        t.mains.forEach((m) => { if (!original.mains.find((om) => om.value === m.value)) restored.push(m) })
+        t.mains = restored
+      })
+    } else if (c.kind === 'reorderSubs') {
+      editDraft((t) => {
+        const m = findMain(t, c.mainValue); if (!m) return
+        const om = original.mains.find((x) => x.value === c.mainValue)
+        if (!om) return
+        const draftSet = new Set(m.subclasses.map((s) => s.value))
+        const restored = []
+        om.subclasses.forEach((s) => { if (draftSet.has(s.value)) restored.push(m.subclasses.find((x) => x.value === s.value)) })
+        m.subclasses.forEach((s) => { if (!om.subclasses.find((os) => os.value === s.value)) restored.push(s) })
+        m.subclasses = restored
+      })
+    }
+  }
+
+  // ---- selection helpers ---------------------------------------------------
+
+  function selectMain(value) {
+    if (selected?.kind === 'main' && selected.value === value && mode === 'view') return
+    setSelected({ kind: 'main', value }); setMode('view')
+  }
+  function selectSub(mainValue, value) {
+    setSelected({ kind: 'sub', mainValue, value }); setMode('view')
+  }
+  function toggle(value, e) {
+    e?.stopPropagation()
+    setExpanded((p) => ({ ...p, [value]: !p[value] }))
+  }
+
+  // ---- save flow -----------------------------------------------------------
+
   function discard() {
     setDraft(clone(original))
-    setEditing(null)
-    setNewMain({ value: '', number: '', label: '' })
-    setNewSub({})
+    setSelected(null); setMode('view'); setAddingMain(false)
+    setNewMain({ value: '', number: '', label: '' }); setNewSub({ value: '', label: '' })
     setError(null)
   }
   async function commit() {
-    setSaving(true)
-    setSaveError(null)
+    setSaving(true); setSaveError(null)
     try {
       const res = await apiFetch('/api/admin/locarno/tree', {
         method: 'PUT',
@@ -294,163 +460,23 @@ export default function AdminLocarno() {
       if (!res.ok) throw new Error(await readError(res, 'Save failed'))
       clearLocarnoTreeCache()
       setShowSave(false)
-      await load() // reload canonical state from server
-    } catch (e) {
-      setSaveError(e.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-  const toggle = (v) => setExpanded((p) => ({ ...p, [v]: !p[v] }))
-
-  // ---- row renderers ---------------------------------------------------------
-
-  // Read-only row in the "Saved" panel. Highlight by comparison to draft.
-  function SavedMain({ m }) {
-    const d = draftMains[m.value]
-    const removed = !d
-    const labelChanged = d && d.label !== m.label
-    const numberChanged = d && d.number !== m.number
-    const isOpen = !!expanded[m.value]
-    const rowMod = removed ? 'is-removed' : (labelChanged || numberChanged) ? 'is-edited' : ''
-    return (
-      <li className={`locarno-main ${rowMod}`}>
-        <div className="locarno-row">
-          <button className="locarno-toggle" onClick={() => toggle(m.value)} aria-label="toggle">
-            {isOpen ? '▾' : '▸'}
-          </button>
-          <span className={`locarno-num ${numberChanged ? 'is-changed' : ''}`}>{m.number}</span>
-          <span className={`locarno-label ${labelChanged ? 'is-changed' : ''} ${removed ? 'is-struck' : ''}`}>
-            {m.label}
-          </span>
-          <code className="locarno-value">{m.value}</code>
-        </div>
-        {isOpen && (
-          <ul className="locarno-subs">
-            {subsReordered[m.value] && (
-              <li className="locarno-row locarno-sub locarno-reorder-note">
-                <span className="diff-badge diff-reorder">order changed</span>
-              </li>
-            )}
-            {m.subclasses.map((s) => {
-              const ds = d?.subclasses.find((x) => x.value === s.value)
-              const subRemoved = !ds
-              const subChanged = ds && ds.label !== s.label
-              return (
-                <li key={s.value} className={`locarno-row locarno-sub ${subRemoved ? 'is-removed' : subChanged ? 'is-edited' : ''}`}>
-                  <span className={`locarno-label ${subChanged ? 'is-changed' : ''} ${subRemoved ? 'is-struck' : ''}`}>
-                    {s.label}
-                  </span>
-                  <code className="locarno-value">{s.value}</code>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </li>
-    )
-  }
-
-  // Interactive row in the "Draft" panel.
-  function DraftMain({ m, i }) {
-    const o = origMains[m.value]
-    const isNew = !o
-    const labelChanged = o && o.label !== m.label
-    const numberChanged = o && o.number !== m.number
-    const isOpen = !!expanded[m.value]
-    const rowMod = isNew ? 'is-added' : (labelChanged || numberChanged) ? 'is-edited' : ''
-    const subDraft = newSub[m.value] || { value: '', label: '' }
-    return (
-      <li className={`locarno-main ${rowMod}`}>
-        <div className="locarno-row">
-          <button className="locarno-toggle" onClick={() => toggle(m.value)} aria-label="toggle">
-            {isOpen ? '▾' : '▸'}
-          </button>
-          <span className={`locarno-num ${numberChanged ? 'is-changed' : ''}`}>{m.number}</span>
-          {editing?.kind === 'main' && editing.value === m.value ? (
-            <>
-              <input className="locarno-edit" value={editLabel} autoFocus
-                onChange={(e) => setEditLabel(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveEdit()} />
-              <button className="btn-secondary" onClick={() => saveEdit()}>Done</button>
-              <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
-            </>
-          ) : (
-            <>
-              <span className={`locarno-label ${labelChanged ? 'is-changed' : ''}`}>{m.label}</span>
-              <code className="locarno-value">{m.value}</code>
-              <span className="locarno-actions">
-                <button onClick={() => reorderMains(i, -1)} disabled={i === 0} title="Move up">↑</button>
-                <button onClick={() => reorderMains(i, 1)} disabled={i === (draft.mains.length - 1)} title="Move down">↓</button>
-                <button onClick={() => startEdit('main', m.value, m.label)}>Rename</button>
-                <button className="btn-delete" onClick={() => removeMain(m.value)}>Remove</button>
-              </span>
-            </>
-          )}
-        </div>
-        {isOpen && (
-          <ul className="locarno-subs">
-            {subsReordered[m.value] && (
-              <li className="locarno-row locarno-sub locarno-reorder-note">
-                <span className="diff-badge diff-reorder">order changed</span>
-              </li>
-            )}
-            {m.subclasses.map((s, j) => {
-              const os = o?.subclasses.find((x) => x.value === s.value)
-              const subNew = !os
-              const subEdited = os && os.label !== s.label
-              const subMod = subNew ? 'is-added' : subEdited ? 'is-edited' : ''
-              return (
-                <li key={s.value} className={`locarno-row locarno-sub ${subMod}`}>
-                  {editing?.kind === 'sub' && editing.value === s.value ? (
-                    <>
-                      <input className="locarno-edit" value={editLabel} autoFocus
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && saveEdit(m.value)} />
-                      <button className="btn-secondary" onClick={() => saveEdit(m.value)}>Done</button>
-                      <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <span className={`locarno-label ${subEdited ? 'is-changed' : ''}`}>{s.label}</span>
-                      <code className="locarno-value">{s.value}</code>
-                      <span className="locarno-actions">
-                        <button onClick={() => reorderSubs(m.value, j, -1)} disabled={j === 0} title="Move up">↑</button>
-                        <button onClick={() => reorderSubs(m.value, j, 1)} disabled={j === m.subclasses.length - 1} title="Move down">↓</button>
-                        <button onClick={() => startEdit('sub', s.value, s.label)}>Rename</button>
-                        <button className="btn-delete" onClick={() => removeSub(m.value, s.value)}>Remove</button>
-                      </span>
-                    </>
-                  )}
-                </li>
-              )
-            })}
-            <li className="locarno-row locarno-sub locarno-add-row-li">
-              <form className="admin-add-row" onSubmit={(e) => addSub(e, m.value)}>
-                <input placeholder="subclass value" value={subDraft.value}
-                  onChange={(e) => setNewSub((p) => ({ ...p, [m.value]: { ...subDraft, value: e.target.value } }))} />
-                <input placeholder="subclass label" value={subDraft.label}
-                  onChange={(e) => setNewSub((p) => ({ ...p, [m.value]: { ...subDraft, label: e.target.value } }))} />
-                <button type="submit">Add subclass</button>
-              </form>
-            </li>
-          </ul>
-        )}
-      </li>
-    )
+      await load()
+    } catch (e) { setSaveError(e.message) }
+    finally { setSaving(false) }
   }
 
   if (loading && !draft) return <div className="loading">Loading…</div>
 
-  const removalCount = diff.filter((c) => c.type === 'remove').length
+  const mains = draft?.mains || []
 
   return (
     <section className="admin-section admin-locarno">
+      {/* Sticky save bar — nothing is persisted until "Save changes" is pressed. */}
       <div className={`locarno-savebar${dirty ? ' is-dirty' : ''}`}>
         <span className="locarno-savebar-status">
           {dirty
-            ? `${diff.length} pending change${diff.length === 1 ? '' : 's'} — not saved yet`
-            : 'No pending changes'}
+            ? `${diff.count} unsaved change${diff.count === 1 ? '' : 's'}`
+            : 'No unsaved changes'}
         </span>
         <div className="locarno-savebar-actions">
           <button className="btn-secondary" onClick={discard} disabled={!dirty || saving}>Discard</button>
@@ -462,60 +488,175 @@ export default function AdminLocarno() {
 
       {error && <div className="admin-error">{error}</div>}
 
-      <div className="locarno-panels">
-        {/* SAVED — read-only snapshot of what's currently in the DB */}
-        <article className="locarno-panel locarno-panel--saved">
-          <header className="locarno-panel-header">
-            <h3>Saved</h3>
-            <span className="locarno-panel-count">{original?.mains.length ?? 0} classes</span>
-            {mainsReordered && <span className="diff-badge diff-reorder">order changed</span>}
-          </header>
-          <ul className="locarno-tree">
-            {(original?.mains || []).map((m) => <SavedMain key={m.value} m={m} />)}
-            {(original?.mains || []).length === 0 && <li className="admin-empty">No Locarno classes.</li>}
-          </ul>
-        </article>
-
-        {/* DRAFT — your working copy. Edits stay here until Save. */}
-        <article className="locarno-panel locarno-panel--draft">
-          <header className="locarno-panel-header">
-            <h3>Draft</h3>
-            <span className="locarno-panel-count">{draft?.mains.length ?? 0} classes</span>
-            {mainsReordered && <span className="diff-badge diff-reorder">order changed</span>}
-          </header>
-          <form className="admin-add-row locarno-add-main" onSubmit={addMain}>
-            <input placeholder="value (e.g. SINIF_1)" value={newMain.value}
-              onChange={(e) => setNewMain({ ...newMain, value: e.target.value })} />
-            <input placeholder="number" type="number" value={newMain.number}
+      {/* Toolbar above the tree — adding a class lives here, not inside rows. */}
+      <div className="locarno-toolbar">
+        {addingMain ? (
+          <form className="locarno-inline-form" onSubmit={(e) => { e.preventDefault(); commitAddMain() }}>
+            <input name="value" placeholder="value (e.g. SINIF_99)" value={newMain.value}
+              onChange={(e) => setNewMain({ ...newMain, value: e.target.value })} autoFocus />
+            <input name="number" type="number" placeholder="no." value={newMain.number}
               onChange={(e) => setNewMain({ ...newMain, number: e.target.value })} />
-            <input placeholder="label" value={newMain.label}
+            <input name="label" placeholder="label" value={newMain.label}
               onChange={(e) => setNewMain({ ...newMain, label: e.target.value })} />
-            <button type="submit" className="btn-primary">Add main class</button>
+            <button type="submit" className="btn-primary">Add</button>
+            <button type="button" className="btn-secondary" onClick={() => { setAddingMain(false); setError(null) }}>Cancel</button>
           </form>
-          <ul className="locarno-tree">
-            {(draft?.mains || []).map((m, i) => <DraftMain key={m.value} m={m} i={i} />)}
-            {(draft?.mains || []).length === 0 && <li className="admin-empty">No Locarno classes. Add one above.</li>}
-          </ul>
-        </article>
+        ) : (
+          <button className="btn-link" onClick={() => setAddingMain(true)}>+ Add main class</button>
+        )}
       </div>
+
+      {/* The tree — clean rows, no per-row buttons. Click to select. */}
+      <ul className="locarno-tree">
+        {mains.map((m) => {
+          const mainSelected = selected?.kind === 'main' && selected.value === m.value
+          const isOpen = !!expanded[m.value]
+          const marker = markers[`m:${m.value}`]
+          return (
+            <Fragment key={m.value}>
+              <li
+                className={`locarno-row${mainSelected ? ' is-selected' : ''}`}
+                onClick={() => selectMain(m.value)}
+              >
+                <button className="locarno-toggle" onClick={(e) => toggle(m.value, e)} aria-label="expand">
+                  {isOpen ? '▾' : '▸'}
+                </button>
+                <span className="locarno-num">{m.number}</span>
+                <span className="locarno-label">{m.label}</span>
+                <span style={{ display: 'flex', alignItems: 'center' }}>
+                  <code className="locarno-value">{m.value}</code>
+                  {marker && <span className={`locarno-change-dot is-${marker}`} title={`${marker}ed`} />}
+                </span>
+              </li>
+
+              {mainSelected && (
+                <li className="locarno-action-band">
+                  {mode === 'rename' ? (
+                    <>
+                      <input value={editLabel} autoFocus onChange={(e) => setEditLabel(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setMode('view') }} />
+                      <button onClick={commitRename}>Save</button>
+                      <button onClick={() => setMode('view')}>Cancel</button>
+                    </>
+                  ) : mode === 'addSub' ? (
+                    <>
+                      <input placeholder="subclass value" value={newSub.value} autoFocus
+                        onChange={(e) => setNewSub({ ...newSub, value: e.target.value })} />
+                      <input placeholder="subclass label" value={newSub.label}
+                        onChange={(e) => setNewSub({ ...newSub, label: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') commitAddSub(); if (e.key === 'Escape') setMode('view') }} />
+                      <button onClick={commitAddSub}>Add</button>
+                      <button onClick={() => setMode('view')}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setEditLabel(m.label); setMode('rename') }}>Rename</button>
+                      <button onClick={() => moveMain(m.value, -1)} disabled={mains.indexOf(m) === 0}>Move up</button>
+                      <button onClick={() => moveMain(m.value, +1)} disabled={mains.indexOf(m) === mains.length - 1}>Move down</button>
+                      <button onClick={() => { setExpanded((p) => ({ ...p, [m.value]: true })); setNewSub({ value: '', label: '' }); setMode('addSub') }}>+ Add subclass</button>
+                      <button className="btn-delete" onClick={removeSelected}>Remove</button>
+                    </>
+                  )}
+                </li>
+              )}
+
+              {isOpen && (
+                <li>
+                  <ul className="locarno-subs">
+                    {m.subclasses.map((s, j) => {
+                      const subSelected = selected?.kind === 'sub' && selected.mainValue === m.value && selected.value === s.value
+                      const subMarker = markers[`s:${s.value}`]
+                      return (
+                        <Fragment key={s.value}>
+                          <li
+                            className={`locarno-row locarno-sub${subSelected ? ' is-selected' : ''}`}
+                            onClick={() => selectSub(m.value, s.value)}
+                          >
+                            <span className="locarno-toggle is-leaf" aria-hidden />
+                            <span className="locarno-label">{s.label}</span>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>
+                              <code className="locarno-value">{s.value}</code>
+                              {subMarker && <span className={`locarno-change-dot is-${subMarker}`} title={`${subMarker}ed`} />}
+                            </span>
+                          </li>
+                          {subSelected && (
+                            <li className="locarno-action-band is-sub">
+                              {mode === 'rename' ? (
+                                <>
+                                  <input value={editLabel} autoFocus onChange={(e) => setEditLabel(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setMode('view') }} />
+                                  <button onClick={commitRename}>Save</button>
+                                  <button onClick={() => setMode('view')}>Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => { setEditLabel(s.label); setMode('rename') }}>Rename</button>
+                                  <button onClick={() => moveSub(m.value, s.value, -1)} disabled={j === 0}>Move up</button>
+                                  <button onClick={() => moveSub(m.value, s.value, +1)} disabled={j === m.subclasses.length - 1}>Move down</button>
+                                  <button className="btn-delete" onClick={removeSelected}>Remove</button>
+                                </>
+                              )}
+                            </li>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                    {m.subclasses.length === 0 && (
+                      <li className="locarno-row locarno-sub" style={{ color: 'var(--text-muted)', cursor: 'default' }}>
+                        <span className="locarno-toggle is-leaf" aria-hidden />
+                        <span className="locarno-label" style={{ fontStyle: 'italic' }}>No subclasses</span>
+                      </li>
+                    )}
+                  </ul>
+                </li>
+              )}
+            </Fragment>
+          )
+        })}
+        {mains.length === 0 && (
+          <li className="locarno-row" style={{ cursor: 'default', color: 'var(--text-muted)' }}>
+            No Locarno classes. Use “+ Add main class” to start.
+          </li>
+        )}
+      </ul>
+
+      {/* Changes section — only differences. Each block has its own undo. */}
+      {dirty && (
+        <section className="locarno-changes">
+          <header className="locarno-changes-header">
+            <h3>Pending changes</h3>
+            <span className="locarno-changes-count">
+              {diff.count} change{diff.count === 1 ? '' : 's'}
+            </span>
+          </header>
+          <div className="locarno-change-list">
+            {diff.changes.map((c, i) => (
+              <ChangeBlock key={i} change={c} onUndo={() => undoChange(c)} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <ConfirmDialog
         open={showSave}
-        title="Save Locarno changes?"
-        confirmLabel={`Save ${diff.length} change${diff.length === 1 ? '' : 's'}`}
-        danger={removalCount > 0}
+        title="Save these changes?"
+        confirmLabel={`Save ${diff.count} change${diff.count === 1 ? '' : 's'}`}
+        danger={diff.removalCount > 0}
         busy={saving}
         onConfirm={commit}
         onCancel={() => !saving && setShowSave(false)}
       >
         <p className="confirm-lead">
-          These changes are applied together in one transaction. Review before saving:
+          These are applied together in one transaction — nothing is saved unless all of them succeed.
         </p>
-        <DiffList changes={diff} />
-        {removalCount > 0 && (
+        <div className="locarno-change-list">
+          {diff.changes.map((c, i) => (
+            <ChangeBlock key={i} change={c} /* read-only in dialog: no onUndo */ />
+          ))}
+        </div>
+        {diff.removalCount > 0 && (
           <p className="confirm-warn">
-            {removalCount} removal{removalCount === 1 ? '' : 's'} included. A removal is
-            refused if any design still uses that class or subclass.
+            {diff.removalCount} removal{diff.removalCount === 1 ? '' : 's'} included. A removal is refused if any design still uses that class or subclass.
           </p>
         )}
         {saveError && <div className="admin-error">{saveError}</div>}

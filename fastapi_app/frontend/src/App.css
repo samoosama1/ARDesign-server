@@ -1236,101 +1236,254 @@ header.app > h1 { font-size: 1.5rem; }
 .locarno-savebar.is-dirty .locarno-savebar-status { color: var(--color-warning); }
 .locarno-savebar-actions { display: flex; gap: 0.5rem; }
 
-/* Locarno: live pending-changes panel */
-.locarno-diff {
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: var(--bg-muted);
-  padding: 0.85rem 1rem;
-  margin-bottom: 1rem;
-}
-.locarno-diff-title { margin: 0 0 0.6rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
-.locarno-diff-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.locarno-diff-item { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.88rem; color: var(--text-primary); }
-.diff-text { line-height: 1.3; }
-.diff-parent { color: var(--text-muted); }
+/* ── Locarno editor: clean tree + click-to-select + action band ── */
 
-/* Change badges, shared by the diff list and the in-tree row markers */
-.diff-badge {
-  flex-shrink: 0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  border-radius: 6px;
-  padding: 0.12rem 0.42rem;
+/* Slim toolbar above the tree — adding a class lives here, not in rows. */
+.locarno-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
 }
-.diff-badge.diff-add { background: #d1fae5; color: #047857; }
-.diff-badge.diff-edit { background: var(--color-primary-soft); color: var(--color-primary); }
-.diff-badge.diff-remove { background: var(--color-danger-soft); color: var(--color-danger); }
-.diff-badge.diff-reorder { background: #fef3c7; color: #b45309; }
-
-/* ── Locarno two-panel diff ──────────────────────────── */
-
-.locarno-panels {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: flex-start;
+.locarno-toolbar .btn-link {
+  background: none;
+  border: 1px dashed var(--border-default);
+  color: var(--text-secondary);
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
 }
-@media (max-width: 900px) {
-  .locarno-panels { grid-template-columns: 1fr; }
+.locarno-toolbar .btn-link:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.locarno-toolbar .locarno-inline-form { display: flex; gap: 0.5rem; flex: 1; min-width: 0; flex-wrap: wrap; }
+.locarno-toolbar input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  min-width: 0;
 }
+.locarno-toolbar input[name="value"]  { flex: 2; min-width: 8rem; }
+.locarno-toolbar input[name="number"] { width: 5rem; }
+.locarno-toolbar input[name="label"]  { flex: 3; min-width: 10rem; }
 
-.locarno-panel {
+/* The tree itself. One column. Rows have NO buttons; selection drives editing. */
+.locarno-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--border-default);
   border-radius: 12px;
   background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
-.locarno-panel--saved { background: #fbfaff; }
-.locarno-panel--draft .locarno-tree { padding-bottom: 0.5rem; }
+.locarno-subs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: #fbfaff;
+  border-top: 1px solid var(--border-default);
+}
 
-.locarno-panel-header {
-  display: flex;
+.locarno-row {
+  display: grid;
+  grid-template-columns: 1.6rem 2.5rem 1fr auto;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.65rem 0.9rem;
-  border-bottom: 1px solid var(--border-default);
-  background: var(--bg-muted);
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--bg-muted);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
 }
-.locarno-panel-header h3 {
-  margin: 0;
+.locarno-row:hover { background: var(--bg-muted); }
+.locarno-row:last-child { border-bottom: 0; }
+.locarno-sub { grid-template-columns: 1.6rem 1fr auto; padding-left: 2.4rem; }
+
+.locarno-toggle {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
   font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
 }
-.locarno-panel--draft .locarno-panel-header { background: var(--color-primary-soft); }
-.locarno-panel--draft .locarno-panel-header h3 { color: var(--color-primary); }
-.locarno-panel-count { color: var(--text-muted); font-size: 0.8rem; margin-left: auto; }
-.locarno-panel-header .diff-badge { margin-left: 0.25rem; }
+.locarno-toggle:hover { background: var(--bg-card); color: var(--text-primary); }
+.locarno-toggle.is-leaf { visibility: hidden; }
 
-.locarno-panel .locarno-tree { padding: 0.4rem 0.9rem; }
-.locarno-panel .locarno-add-main { padding: 0.65rem 0.9rem 0.25rem; margin-bottom: 0; }
+.locarno-num {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+.locarno-label {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.locarno-value {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  padding: 0.15rem 0.5rem;
+  border-radius: 5px;
+  font-family: ui-monospace, monospace;
+}
 
-/* Per-row diff tinting: green=added, red=removed, amber=edited.
-   Targeting > .locarno-row so the row gets the tint but nested .locarno-subs stay neutral. */
-.locarno-main.is-added > .locarno-row { background: #ecfdf5; }
-.locarno-main.is-removed > .locarno-row { background: var(--color-danger-soft); }
-.locarno-main.is-edited > .locarno-row { background: #fef9c3; }
-.locarno-row.locarno-sub.is-added { background: #ecfdf5; }
-.locarno-row.locarno-sub.is-removed { background: var(--color-danger-soft); }
-.locarno-row.locarno-sub.is-edited { background: #fef9c3; }
+/* Selected row — clear primary-tinted bar, no shouting */
+.locarno-row.is-selected {
+  background: var(--color-primary-soft);
+  box-shadow: inset 3px 0 0 0 var(--color-primary);
+}
+.locarno-row.is-selected:hover { background: var(--color-primary-soft); }
 
-.locarno-label.is-changed { font-weight: 600; color: var(--text-primary); }
-.locarno-num.is-changed { color: var(--color-warning); font-weight: 700; }
-.locarno-label.is-struck { text-decoration: line-through; color: var(--text-muted); }
+/* Small status dot at the right of a row that has unsaved changes touching it.
+   Subtle in-context cue without tinting the whole row. */
+.locarno-change-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 0.4rem;
+  flex-shrink: 0;
+}
+.locarno-change-dot.is-add    { background: var(--color-success); }
+.locarno-change-dot.is-edit   { background: var(--color-warning); }
+.locarno-change-dot.is-reorder { background: var(--color-info); }
 
-.locarno-reorder-note { background: #fffbeb; padding: 0.3rem 0.4rem; }
-.locarno-reorder-note .diff-badge { margin-left: 0; }
+/* Action band — slides in directly under the selected row. ONE at a time;
+   uncramped buttons; sits in its own band so long values can't shove them off. */
+.locarno-action-band {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.65rem 0.9rem 0.65rem 3.5rem;
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--bg-muted);
+}
+.locarno-action-band.is-sub { padding-left: 4.9rem; }
+.locarno-action-band button {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.locarno-action-band button:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.locarno-action-band button:disabled { opacity: 0.4; cursor: default; }
+.locarno-action-band .btn-delete {
+  color: var(--color-danger);
+  border-color: var(--color-danger-soft);
+  margin-left: auto; /* push destructive to the right so it isn't the first thing thumbs land on */
+}
+.locarno-action-band input {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 7px;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 8rem;
+}
 
-.locarno-add-row-li { background: transparent; padding-top: 0.45rem; }
+/* ── Changes section: Bitbucket-style blocks, only the differences ── */
 
-/* The "Saved" panel is read-only — keep the visuals calm. */
-.locarno-panel--saved .locarno-row { cursor: default; }
-.locarno-panel--saved .locarno-toggle { cursor: pointer; }
+.locarno-changes {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-default);
+}
+.locarno-changes-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+.locarno-changes-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.locarno-changes-header .locarno-changes-count {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.locarno-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.locarno-change-block {
+  border: 1px solid var(--border-default);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  padding: 0.7rem 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: start;
+}
+.locarno-change-block.kind-add    { border-left-color: var(--color-success); }
+.locarno-change-block.kind-remove { border-left-color: var(--color-danger); }
+.locarno-change-block.kind-edit   { border-left-color: var(--color-warning); }
+.locarno-change-block.kind-reorder { border-left-color: var(--color-info); }
+
+.locarno-change-kind {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.locarno-change-block.kind-add    .locarno-change-kind { color: var(--color-success); }
+.locarno-change-block.kind-remove .locarno-change-kind { color: var(--color-danger); }
+.locarno-change-block.kind-edit   .locarno-change-kind { color: var(--color-warning); }
+.locarno-change-block.kind-reorder .locarno-change-kind { color: var(--color-info); }
+
+.locarno-change-body { font-size: 0.92rem; color: var(--text-primary); line-height: 1.45; min-width: 0; }
+.locarno-change-body code {
+  background: var(--bg-muted);
+  font-size: 0.78rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin: 0 0.15rem;
+  font-family: ui-monospace, monospace;
+}
+.locarno-change-body .from { color: var(--text-muted); text-decoration: line-through; }
+.locarno-change-body .to   { color: var(--text-primary); font-weight: 600; }
+.locarno-change-body .arrow { margin: 0 0.4rem; color: var(--text-muted); }
+.locarno-change-body ul { margin: 0.35rem 0 0 1.1rem; padding: 0; }
+.locarno-change-body li { margin: 0.1rem 0; }
+
+.locarno-undo {
+  align-self: start;
+  background: none;
+  border: 0;
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+}
+.locarno-undo:hover { text-decoration: underline; }
+
+.locarno-empty-changes {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 1rem;
+}
 
 /* Confirmation dialog (replaces window.confirm across the admin panel) */
 .confirm-dialog { text-align: left; max-width: 460px; width: calc(100% - 2rem); }
