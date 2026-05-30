@@ -1265,9 +1265,72 @@ header.app > h1 { font-size: 1.5rem; }
 .diff-badge.diff-remove { background: var(--color-danger-soft); color: var(--color-danger); }
 .diff-badge.diff-reorder { background: #fef3c7; color: #b45309; }
 
-/* Subtle highlight on newly-added (unsaved) rows */
-.locarno-main.is-new > .locarno-row,
-.locarno-row.locarno-sub.is-new { background: #ecfdf5; }
+/* ── Locarno two-panel diff ──────────────────────────── */
+
+.locarno-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .locarno-panels { grid-template-columns: 1fr; }
+}
+
+.locarno-panel {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.locarno-panel--saved { background: #fbfaff; }
+.locarno-panel--draft .locarno-tree { padding-bottom: 0.5rem; }
+
+.locarno-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-muted);
+}
+.locarno-panel-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.locarno-panel--draft .locarno-panel-header { background: var(--color-primary-soft); }
+.locarno-panel--draft .locarno-panel-header h3 { color: var(--color-primary); }
+.locarno-panel-count { color: var(--text-muted); font-size: 0.8rem; margin-left: auto; }
+.locarno-panel-header .diff-badge { margin-left: 0.25rem; }
+
+.locarno-panel .locarno-tree { padding: 0.4rem 0.9rem; }
+.locarno-panel .locarno-add-main { padding: 0.65rem 0.9rem 0.25rem; margin-bottom: 0; }
+
+/* Per-row diff tinting: green=added, red=removed, amber=edited.
+   Targeting > .locarno-row so the row gets the tint but nested .locarno-subs stay neutral. */
+.locarno-main.is-added > .locarno-row { background: #ecfdf5; }
+.locarno-main.is-removed > .locarno-row { background: var(--color-danger-soft); }
+.locarno-main.is-edited > .locarno-row { background: #fef9c3; }
+.locarno-row.locarno-sub.is-added { background: #ecfdf5; }
+.locarno-row.locarno-sub.is-removed { background: var(--color-danger-soft); }
+.locarno-row.locarno-sub.is-edited { background: #fef9c3; }
+
+.locarno-label.is-changed { font-weight: 600; color: var(--text-primary); }
+.locarno-num.is-changed { color: var(--color-warning); font-weight: 700; }
+.locarno-label.is-struck { text-decoration: line-through; color: var(--text-muted); }
+
+.locarno-reorder-note { background: #fffbeb; padding: 0.3rem 0.4rem; }
+.locarno-reorder-note .diff-badge { margin-left: 0; }
+
+.locarno-add-row-li { background: transparent; padding-top: 0.45rem; }
+
+/* The "Saved" panel is read-only — keep the visuals calm. */
+.locarno-panel--saved .locarno-row { cursor: default; }
+.locarno-panel--saved .locarno-toggle { cursor: pointer; }
 
 /* Confirmation dialog (replaces window.confirm across the admin panel) */
 .confirm-dialog { text-align: left; max-width: 460px; width: calc(100% - 2rem); }
