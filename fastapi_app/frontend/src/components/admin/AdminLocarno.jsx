@@ -471,21 +471,6 @@ export default function AdminLocarno() {
 
   return (
     <section className="admin-section admin-locarno">
-      {/* Sticky save bar — nothing is persisted until "Save changes" is pressed. */}
-      <div className={`locarno-savebar${dirty ? ' is-dirty' : ''}`}>
-        <span className="locarno-savebar-status">
-          {dirty
-            ? `${diff.count} unsaved change${diff.count === 1 ? '' : 's'}`
-            : 'No unsaved changes'}
-        </span>
-        <div className="locarno-savebar-actions">
-          <button className="btn-secondary" onClick={discard} disabled={!dirty || saving}>Discard</button>
-          <button className="btn-primary" onClick={() => { setSaveError(null); setShowSave(true) }} disabled={!dirty || saving}>
-            Save changes
-          </button>
-        </div>
-      </div>
-
       {error && <div className="admin-error">{error}</div>}
 
       {/* Toolbar above the tree — adding a class lives here, not inside rows. */}
@@ -505,6 +490,11 @@ export default function AdminLocarno() {
           <button className="btn-link" onClick={() => setAddingMain(true)}>+ Add main class</button>
         )}
       </div>
+
+      {/* Two-column workspace: tree on the left, sticky changes rail on the right
+          so admins see the diff while editing instead of scrolling for it. */}
+      <div className="locarno-workspace">
+      <div className="locarno-tree-col">
 
       {/* The tree — clean rows, no per-row buttons. Click to select. */}
       <ul className="locarno-tree">
@@ -620,22 +610,40 @@ export default function AdminLocarno() {
         )}
       </ul>
 
-      {/* Changes section — only differences. Each block has its own undo. */}
-      {dirty && (
-        <section className="locarno-changes">
-          <header className="locarno-changes-header">
+      </div>{/* /locarno-tree-col */}
+
+      {/* Sticky right rail: save controls + diff. Visible while editing,
+          so admins see what they've changed without scrolling. */}
+      <aside className={`locarno-changes-col${dirty ? ' is-dirty' : ''}`}>
+        <header className="locarno-changes-header">
+          <div className="locarno-changes-heading">
             <h3>Pending changes</h3>
             <span className="locarno-changes-count">
-              {diff.count} change{diff.count === 1 ? '' : 's'}
+              {dirty ? `${diff.count} change${diff.count === 1 ? '' : 's'}` : 'none yet'}
             </span>
-          </header>
+          </div>
+          <div className="locarno-changes-actions">
+            <button className="btn-secondary" onClick={discard} disabled={!dirty || saving}>Discard</button>
+            <button className="btn-primary" onClick={() => { setSaveError(null); setShowSave(true) }} disabled={!dirty || saving}>
+              Save changes
+            </button>
+          </div>
+        </header>
+
+        {dirty ? (
           <div className="locarno-change-list">
             {diff.changes.map((c, i) => (
               <ChangeBlock key={i} change={c} onUndo={() => undoChange(c)} />
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <div className="locarno-changes-empty">
+            Edit the tree — your changes will appear here, one block per change.
+          </div>
+        )}
+      </aside>
+
+      </div>{/* /locarno-workspace */}
 
       <ConfirmDialog
         open={showSave}
