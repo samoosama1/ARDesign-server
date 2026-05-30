@@ -121,8 +121,8 @@ async def save_tree(body: LocarnoTreeUpdate, db: AsyncSession = Depends(get_db))
     if blocked:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Cannot save: still referenced by designs — " + "; ".join(blocked)
-            + ". Reclassify those designs first.",
+            "Cannot save. The following entries are still referenced by designs: "
+            + "; ".join(blocked) + ". Reclassify those designs first.",
         )
 
     # 4. Apply. Delete first (frees unique `number`s), then create, then update.
@@ -163,7 +163,7 @@ async def save_tree(body: LocarnoTreeUpdate, db: AsyncSession = Depends(get_db))
         await db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Save failed a uniqueness constraint — most likely a main class number "
+            "Save failed a uniqueness check. Most likely a main class number "
             "is already taken. Check the numbers and try again.",
         )
     locarno_cache.invalidate()

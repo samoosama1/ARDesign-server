@@ -37,7 +37,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
     if (!tree) return []
     return tree.main_classes.map((m) => ({
       value: m.value,
-      label: `Class ${m.number} — ${m.label}`,
+      label: `Class ${m.number}: ${m.label}`,
     }))
   }, [tree])
   const subOptions = useMemo(() => {
@@ -133,7 +133,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
                 options={mainOptions}
                 value={mainClass}
                 onChange={handleMainChange}
-                placeholder={treeLoading ? 'Loading…' : 'Type to filter — e.g. furniture, foodstuffs'}
+                placeholder={treeLoading ? 'Loading…' : 'Type to filter, e.g. furniture, foodstuffs'}
                 disabled={treeLoading || !tree}
               />
             </label>
@@ -161,7 +161,7 @@ export default function RegistrationWizard({ open, onClose, onComplete }) {
             <div className="wizard-summary">
               <p><strong>{designName}</strong></p>
               <p className="meta">
-                {mainSummary && `Class ${mainSummary.number} — ${mainSummary.label}`}
+                {mainSummary && `Class ${mainSummary.number}: ${mainSummary.label}`}
               </p>
               <p className="meta">{subSummary?.label}</p>
             </div>

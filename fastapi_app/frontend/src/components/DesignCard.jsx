@@ -52,7 +52,7 @@ export default function DesignCard({
             type="button"
             className="warning-badge"
             onClick={() => onWarnings(patent)}
-            title={`${warningCount} warning${warningCount === 1 ? '' : 's'} from the converter — click for details`}
+            title={`${warningCount} warning${warningCount === 1 ? '' : 's'} from the converter. Click for details.`}
           >
             ⚠ {warningCount}
           </button>

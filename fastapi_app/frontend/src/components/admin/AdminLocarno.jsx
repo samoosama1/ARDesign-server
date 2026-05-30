@@ -675,7 +675,7 @@ export default function AdminLocarno() {
           </div>
         ) : (
           <div className="locarno-changes-empty">
-            Edit the tree — your changes will appear here, one block per change.
+            Edit the tree and your changes will appear here, one block per change.
           </div>
         )}
       </aside>
@@ -692,7 +692,7 @@ export default function AdminLocarno() {
         onCancel={() => !saving && setShowSave(false)}
       >
         <p className="confirm-lead">
-          These are applied together in one transaction — nothing is saved unless all of them succeed.
+          These are applied together in one transaction. Nothing is saved unless all of them succeed.
         </p>
         <div className="locarno-change-list">
           {diff.changes.map((c, i) => (

@@ -83,14 +83,14 @@ export default function AdminDesigns() {
                 <td>{d.id}</td>
                 <td>{d.model_filename || <em>(unnamed)</em>}</td>
                 <td>{d.owner_username}</td>
-                <td>{d.file_type || '—'}</td>
+                <td>{d.file_type || '-'}</td>
                 <td>
                   <span className={`admin-status admin-status-${d.status}`}>{d.status}</span>
                   {d.status === 'FAILED' && d.conversion_error && (
                     <span className="admin-error-hint" title={d.conversion_error}> ⓘ</span>
                   )}
                 </td>
-                <td>{d.locarno_main_class || '—'}{d.locarno_subclass ? ` / ${d.locarno_subclass}` : ''}</td>
+                <td>{d.locarno_main_class || '-'}{d.locarno_subclass ? ` / ${d.locarno_subclass}` : ''}</td>
                 <td>{new Date(d.uploaded_at).toLocaleDateString()}</td>
                 <td className="admin-row-actions">
                   <button className="btn-delete" onClick={() => setPending(d)}>Delete</button>

@@ -45,7 +45,7 @@ export default function BrowsePage() {
     if (!tree) return []
     return tree.main_classes.map((m) => ({
       value: m.value,
-      label: `Class ${m.number} — ${m.label}`,
+      label: `Class ${m.number}: ${m.label}`,
     }))
   }, [tree])
   const subOptions = useMemo(() => {
@@ -298,7 +298,7 @@ export default function BrowsePage() {
       {warningsPatent && (
         <div className="modal-overlay" onClick={() => setWarningsPatent(null)}>
           <div className="modal warnings-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Dönüşüm uyarıları — {warningsPatent.model_filename}</h3>
+            <h3>Dönüşüm uyarıları: {warningsPatent.model_filename}</h3>
             <p className="meta">
               Model başarıyla dönüştürüldü, ancak dönüştürücü aşağıdaki konular
               hakkında uyardı. Modeli kontrol etmenizi öneririz.
