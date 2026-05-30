@@ -436,6 +436,24 @@ export default function AdminLocarno() {
   function selectSub(mainValue, value) {
     setSelected({ kind: 'sub', mainValue, value }); setMode('view')
   }
+  // The ⋮ button toggles the action band — clicking it again closes it.
+  // (Clicking the row body only selects; never deselects, to avoid surprises.)
+  function toggleMain(value, e) {
+    e?.stopPropagation()
+    if (selected?.kind === 'main' && selected.value === value) {
+      setSelected(null); setMode('view')
+    } else {
+      setSelected({ kind: 'main', value }); setMode('view')
+    }
+  }
+  function toggleSub(mainValue, value, e) {
+    e?.stopPropagation()
+    if (selected?.kind === 'sub' && selected.value === value && selected.mainValue === mainValue) {
+      setSelected(null); setMode('view')
+    } else {
+      setSelected({ kind: 'sub', mainValue, value }); setMode('view')
+    }
+  }
   function toggle(value, e) {
     e?.stopPropagation()
     setExpanded((p) => ({ ...p, [value]: !p[value] }))
@@ -517,6 +535,14 @@ export default function AdminLocarno() {
                   <code className="locarno-value">{m.value}</code>
                   {marker && <span className={`locarno-change-dot is-${marker}`} title={`${marker}ed`} />}
                 </span>
+                <button
+                  className={`locarno-row-actions-btn${mainSelected ? ' is-open' : ''}`}
+                  onClick={(e) => toggleMain(m.value, e)}
+                  aria-label={mainSelected ? 'Close actions' : 'Show actions'}
+                  title={mainSelected ? 'Close actions' : 'Show actions'}
+                >
+                  {mainSelected ? '✕' : '⋮'}
+                </button>
               </li>
 
               {mainSelected && (
@@ -568,6 +594,14 @@ export default function AdminLocarno() {
                               <code className="locarno-value">{s.value}</code>
                               {subMarker && <span className={`locarno-change-dot is-${subMarker}`} title={`${subMarker}ed`} />}
                             </span>
+                            <button
+                              className={`locarno-row-actions-btn${subSelected ? ' is-open' : ''}`}
+                              onClick={(e) => toggleSub(m.value, s.value, e)}
+                              aria-label={subSelected ? 'Close actions' : 'Show actions'}
+                              title={subSelected ? 'Close actions' : 'Show actions'}
+                            >
+                              {subSelected ? '✕' : '⋮'}
+                            </button>
                           </li>
                           {subSelected && (
                             <li className="locarno-action-band is-sub">
@@ -604,7 +638,10 @@ export default function AdminLocarno() {
           )
         })}
         {mains.length === 0 && (
-          <li className="locarno-row" style={{ cursor: 'default', color: 'var(--text-muted)' }}>
+          <li
+            className="locarno-row"
+            style={{ cursor: 'default', color: 'var(--text-muted)', display: 'block' }}
+          >
             No Locarno classes. Use “+ Add main class” to start.
           </li>
         )}
