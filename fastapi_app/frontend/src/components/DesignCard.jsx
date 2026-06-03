@@ -45,13 +45,18 @@ export default function DesignCard({
 
   return (
     <div className="patent-card">
-      {patent.has_thumbnail && (
+      {patent.has_thumbnail ? (
         <div className="card-thumb">
           <img
             src={`/api/patents/${patent.id}/thumbnail`}
             alt={patent.model_filename}
             loading="lazy"
           />
+        </div>
+      ) : (
+        <div className="card-thumb card-thumb-empty">
+          <span aria-hidden="true">🖼</span>
+          <span>No preview</span>
         </div>
       )}
       <h3>{patent.model_filename}</h3>
