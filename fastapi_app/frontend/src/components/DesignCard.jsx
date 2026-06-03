@@ -1,4 +1,5 @@
 import ActionButton from './ActionButton'
+import { statusLabel } from '../statusLabels'
 
 function statusClass(status) {
   return 'status status-' + status.toLowerCase()
@@ -46,7 +47,7 @@ export default function DesignCard({
     <div className="patent-card">
       <h3>{patent.model_filename}</h3>
       <div className="card-status-row">
-        <span className={statusClass(patent.status)}>{patent.status}</span>
+        <span className={statusClass(patent.status)}>{statusLabel(patent.status)}</span>
         {warningCount > 0 && onWarnings && (
           <button
             type="button"

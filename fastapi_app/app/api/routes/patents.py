@@ -185,7 +185,7 @@ async def generate_from_images(
     Upload 1-4 view images. Validated, re-encoded to PNG, stored, and handed
     off to the `generate` Celery queue which routes to the host-native
     Hunyuan3D service. Returns 202 with QUEUED status; poll /status
-    or /list for progress (QUEUED → IN_PROCESSING → CONVERTED).
+    or /list for progress (QUEUED → GENERATING → QUEUED → CONVERTING → CONVERTED).
 
     The Hunyuan3D-2mv model was trained on front/left/back — 'right' is
     accepted but may be ignored or degrade quality.
@@ -238,7 +238,7 @@ async def generate_from_images(
 
     # Create the Patent row as QUEUED — generation is dispatched immediately
     # (unlike the ZIP flow where the user manually triggers convert), but the
-    # worker flips it to IN_PROCESSING when it actually picks the task up.
+    # worker flips it to GENERATING when it actually picks the task up.
     patent = Patent(
         user_id=current_user.id,
         file_type=FileType.IMAGE,
@@ -271,7 +271,11 @@ async def request_conversion(
     """Enqueue a Celery task to convert the model to GLB."""
     patent = await _get_owned_patent(patent_id, current_user, db)
 
-    if patent.conversion_status in (ConversionStatus.QUEUED, ConversionStatus.IN_PROCESSING):
+    if patent.conversion_status in (
+        ConversionStatus.QUEUED,
+        ConversionStatus.GENERATING,
+        ConversionStatus.CONVERTING,
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Conversion already in progress.")
 
     if patent.conversion_status == ConversionStatus.CONVERTED:

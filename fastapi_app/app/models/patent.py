@@ -35,7 +35,8 @@ class ModelScale(str, enum.Enum):
 class ConversionStatus(str, enum.Enum):
     UPLOADED = "UPLOADED"           # ZIP stored, awaiting user-triggered conversion
     QUEUED = "QUEUED"               # Celery task enqueued, waiting for a worker
-    IN_PROCESSING = "IN_PROCESSING" # Worker picked it up; container/Hunyuan running
+    GENERATING = "GENERATING"       # Image-gen worker is running Hunyuan3D
+    CONVERTING = "CONVERTING"       # Converter container is running
     CONVERTED = "CONVERTED"         # GLB ready
     FAILED = "FAILED"               # Conversion failed
 

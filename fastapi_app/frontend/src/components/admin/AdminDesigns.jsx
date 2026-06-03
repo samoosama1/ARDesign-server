@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import ConfirmDialog from './ConfirmDialog'
+import { statusLabel } from '../../statusLabels'
 
 async function readError(res, fallback) {
   try {
@@ -85,7 +86,7 @@ export default function AdminDesigns() {
                 <td>{d.owner_username}</td>
                 <td>{d.file_type || '-'}</td>
                 <td>
-                  <span className={`admin-status admin-status-${d.status}`}>{d.status}</span>
+                  <span className={`admin-status admin-status-${d.status}`}>{statusLabel(d.status)}</span>
                   {d.status === 'FAILED' && d.conversion_error && (
                     <span className="admin-error-hint" title={d.conversion_error}> ⓘ</span>
                   )}

@@ -589,7 +589,8 @@ header.app > h1 { font-size: 1.5rem; }
 
 .status-uploaded { background: var(--color-info); }
 .status-queued { background: #94a3b8; }
-.status-in_processing { background: var(--color-warning); }
+.status-generating { background: var(--color-warning); }
+.status-converting { background: var(--color-warning); }
 .status-converted { background: var(--color-success); }
 .status-failed { background: var(--color-danger); }
 
@@ -1178,7 +1179,7 @@ header.app > h1 { font-size: 1.5rem; }
 .admin-status { font-weight: 600; }
 .admin-status-CONVERTED { color: var(--color-success); }
 .admin-status-FAILED { color: var(--color-danger); }
-.admin-status-IN_PROCESSING, .admin-status-QUEUED { color: var(--color-warning); }
+.admin-status-CONVERTING, .admin-status-QUEUED, .admin-status-GENERATING { color: var(--color-warning); }
 .admin-error-hint { color: var(--color-danger); cursor: help; }
 
 /* Locarno tree editor */

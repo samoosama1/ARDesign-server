@@ -8,6 +8,11 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Docker image used for the ephemeral converter containers. Defined here (not in
+# tasks.py) so the orphan sweeper below and the task that spawns the containers
+# share one source of truth — bumping the tag in one place can't desync them.
+CONVERTER_IMAGE = "youndria/arpatent:1.5"
+
 celery_app = Celery(
     "arpatent_worker",
     broker=settings.redis_url,
@@ -52,7 +57,7 @@ def _prune_orphan_converters(**_kwargs):
     try:
         result = subprocess.run(
             ["docker", "ps", "-aq",
-             "--filter", "ancestor=youndria/arpatent:1.2"],
+             "--filter", f"ancestor={CONVERTER_IMAGE}"],
             capture_output=True, text=True, check=True, timeout=10,
         )
         ids = [s for s in result.stdout.splitlines() if s.strip()]
