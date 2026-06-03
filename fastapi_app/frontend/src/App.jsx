@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import LandingPage from './pages/LandingPage'
 import BrowsePage from './pages/BrowsePage'
+import DesignDetailPage from './pages/DesignDetailPage'
 import UploadPage from './pages/UploadPage'
 import AdminPage from './pages/AdminPage'
 
@@ -31,6 +32,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<LandingPage />} />
             <Route path="/browse" element={<BrowsePage />} />
+            <Route path="/designs/:id" element={<DesignDetailPage />} />
             <Route
               path="/upload"
               element={

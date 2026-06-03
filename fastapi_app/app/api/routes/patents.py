@@ -375,6 +375,44 @@ async def list_patents(
     ]
 
 
+# -- Detail --------------------------------------------------------------------
+
+@router.get("/{patent_id}", response_model=PatentListItem)
+async def get_patent(
+    patent_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch a single patent's catalog metadata for its detail page.
+
+    Public (like the list and /model endpoints) so anonymous visitors can open
+    a design's dedicated page directly. Owner-only actions (convert/delete) stay
+    behind their own auth-gated routes; this exposes only data already visible
+    via the public list.
+    """
+    stmt = (
+        select(Patent)
+        .where(Patent.id == patent_id)
+        .options(selectinload(Patent.user))
+    )
+    patent = (await db.execute(stmt)).scalar_one_or_none()
+    if not patent:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patent not found.")
+
+    return PatentListItem(
+        id=patent.id,
+        user_id=patent.user_id,
+        uploaded_by=patent.user.username,
+        model_filename=patent.model_filename,
+        file_type=patent.file_type,
+        conversion_status=patent.conversion_status,
+        uploaded_at=patent.uploaded_at,
+        locarno_main_class=patent.locarno_main_class,
+        locarno_subclass=patent.locarno_subclass,
+        has_thumbnail=bool(patent.thumbnail_path),
+        conversion_warnings=patent.conversion_warnings or None,
+    )
+
+
 # -- Serve GLB -----------------------------------------------------------------
 
 @router.get("/{patent_id}/model")

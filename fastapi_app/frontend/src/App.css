@@ -562,6 +562,15 @@ header.app > h1 { font-size: 1.5rem; }
   border-left: 4px solid var(--color-primary);
 }
 .patent-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.patent-card-link { text-decoration: none; color: inherit; }
+
+.card-open-cta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
 
 .patent-card h3 {
   font-size: 1rem;
@@ -1016,6 +1025,108 @@ header.app > h1 { font-size: 1.5rem; }
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+}
+
+/* ── Design detail page ─────────────────────────────────── */
+
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.back-link {
+  align-self: flex-start;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.back-link:hover { text-decoration: underline; }
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.detail-header h1 { word-break: break-all; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.detail-media {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.detail-media model-viewer {
+  width: 100%;
+  height: min(60vh, 480px);
+  background: var(--bg-muted);
+  border-radius: 12px;
+}
+.detail-media .card-thumb { aspect-ratio: 1 / 1; }
+
+.detail-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.detail-qr {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+.detail-qr h3 { font-size: 0.95rem; margin-bottom: 0.75rem; }
+.detail-qr img { width: 200px; max-width: 100%; }
+.detail-qr .qr-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+}
+.detail-meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+.detail-meta dt { color: var(--text-muted); }
+.detail-meta dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+.detail-actions { margin-top: 0; }
+
+.detail-warnings {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+.detail-warnings h3 { margin-bottom: 0.5rem; }
+
+@media (max-width: 720px) {
+  .detail-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Registration wizard ────────────────────────────────── */
