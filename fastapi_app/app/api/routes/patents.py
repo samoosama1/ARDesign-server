@@ -52,6 +52,38 @@ MODEL_EXTENSIONS: dict[str, str] = {
 QUALITY_PRESETS: dict[str, int] = {"turbo": 5, "fast": 10, "standard": 30}
 DETAIL_PRESETS: dict[str, int] = {"low": 196, "standard": 256, "high": 384}
 
+# Canonical order for image-gen source views, so the detail page always shows
+# them front → left → right → back regardless of the dict's insertion order.
+VIEW_ORDER: dict[str, int] = {"front": 0, "left": 1, "right": 2, "back": 3}
+
+
+def _source_image_views(patent: Patent) -> list[str] | None:
+    """Ordered view labels for an image-gen patent, else None.
+
+    `related_files` is a dict of {view: filename} for image-gen patents and a
+    plain list of extracted files for ZIP uploads — only the former applies."""
+    if patent.file_type != FileType.IMAGE or not isinstance(patent.related_files, dict):
+        return None
+    return sorted(patent.related_files.keys(), key=lambda v: VIEW_ORDER.get(v, 99))
+
+
+def _patent_list_item(patent: Patent) -> PatentListItem:
+    """Build the public catalog/detail DTO from a Patent (with `user` loaded)."""
+    return PatentListItem(
+        id=patent.id,
+        user_id=patent.user_id,
+        uploaded_by=patent.user.username,
+        model_filename=patent.model_filename,
+        file_type=patent.file_type,
+        conversion_status=patent.conversion_status,
+        uploaded_at=patent.uploaded_at,
+        locarno_main_class=patent.locarno_main_class,
+        locarno_subclass=patent.locarno_subclass,
+        has_thumbnail=bool(patent.thumbnail_path),
+        conversion_warnings=patent.conversion_warnings or None,
+        source_image_views=_source_image_views(patent),
+    )
+
 
 def _sanitize_filename(name: str) -> str:
     """Strip to alphanumeric, dash, underscore, dot. Replace spaces with underscores."""
@@ -177,20 +209,27 @@ async def generate_from_images(
     right: UploadFile | None = File(None, description="Right view (optional)"),
     back: UploadFile | None = File(None, description="Back view (optional)"),
     title: str | None = Form(None, description="Optional name for the generated model"),
+    locarno_main_class: str = Form(...),
+    locarno_subclass: str = Form(...),
     quality: str | None = Form(None, description="Quality preset: turbo|fast|standard"),
     detail: str | None = Form(None, description="Detail preset: low|standard|high"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Upload 1-4 view images. Validated, re-encoded to PNG, stored, and handed
-    off to the `generate` Celery queue which routes to the host-native
-    Hunyuan3D service. Returns 202 with QUEUED status; poll /status
-    or /list for progress (QUEUED → GENERATING → QUEUED → CONVERTING → CONVERTED).
+    Upload 1-4 view images under a Locarno classification. Validated, re-encoded
+    to PNG, stored, and handed off to the `generate` Celery queue which routes to
+    the host-native Hunyuan3D service. Returns 202 with QUEUED status; poll
+    /status or /list for progress (QUEUED → GENERATING → QUEUED → CONVERTING →
+    CONVERTED).
 
     The Hunyuan3D-2mv model was trained on front/left/back — 'right' is
     accepted but may be ignored or degrade quality.
     """
+    # Same Locarno gate as the ZIP-upload path so every registered design,
+    # however it was produced, carries a valid classification.
+    await locarno_cache.validate_pair(db, locarno_main_class, locarno_subclass)
+
     # Resolve presets up-front so we fail fast on bad input.
     overrides: dict = {}
     if quality is not None:
@@ -244,6 +283,8 @@ async def generate_from_images(
         user_id=current_user.id,
         file_type=FileType.IMAGE,
         model_filename=stem,
+        locarno_main_class=locarno_main_class,
+        locarno_subclass=locarno_subclass,
         storage_path=storage_rel,
         related_files=related,
         conversion_status=ConversionStatus.QUEUED,
@@ -357,22 +398,7 @@ async def list_patents(
 
     patents = (await db.execute(stmt)).scalars().all()
 
-    return [
-        PatentListItem(
-            id=p.id,
-            user_id=p.user_id,
-            uploaded_by=p.user.username,
-            model_filename=p.model_filename,
-            file_type=p.file_type,
-            conversion_status=p.conversion_status,
-            uploaded_at=p.uploaded_at,
-            locarno_main_class=p.locarno_main_class,
-            locarno_subclass=p.locarno_subclass,
-            has_thumbnail=bool(p.thumbnail_path),
-            conversion_warnings=p.conversion_warnings or None,
-        )
-        for p in patents
-    ]
+    return [_patent_list_item(p) for p in patents]
 
 
 # -- Detail --------------------------------------------------------------------
@@ -398,19 +424,7 @@ async def get_patent(
     if not patent:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patent not found.")
 
-    return PatentListItem(
-        id=patent.id,
-        user_id=patent.user_id,
-        uploaded_by=patent.user.username,
-        model_filename=patent.model_filename,
-        file_type=patent.file_type,
-        conversion_status=patent.conversion_status,
-        uploaded_at=patent.uploaded_at,
-        locarno_main_class=patent.locarno_main_class,
-        locarno_subclass=patent.locarno_subclass,
-        has_thumbnail=bool(patent.thumbnail_path),
-        conversion_warnings=patent.conversion_warnings or None,
-    )
+    return _patent_list_item(patent)
 
 
 # -- Serve GLB -----------------------------------------------------------------
@@ -462,6 +476,39 @@ async def serve_thumbnail(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Thumbnail missing from storage.")
 
     return FileResponse(thumb_abs, media_type="image/png")
+
+
+# -- Serve source image (image-gen only) --------------------------------------
+
+@router.get("/{patent_id}/images/{view}")
+async def serve_source_image(
+    patent_id: int,
+    view: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream one of the reference photos an image-gen design was built from.
+
+    Public (like /model and /thumbnail) so the design's detail page can show the
+    source views. `view` is a label from the patent's related_files map (front /
+    left / right / back). 404 for ZIP uploads or unknown views."""
+    patent = await db.get(Patent, patent_id)
+    if (
+        not patent
+        or patent.file_type != FileType.IMAGE
+        or not patent.storage_path
+        or not isinstance(patent.related_files, dict)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image not found.")
+
+    filename = patent.related_files.get(view)
+    if not filename:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image not found.")
+
+    img_abs = os.path.join(settings.media_root, patent.storage_path, filename)
+    if not os.path.exists(img_abs):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image missing from storage.")
+
+    return FileResponse(img_abs, media_type="image/png")
 
 
 # -- Delete --------------------------------------------------------------------

@@ -161,6 +161,7 @@ export default function DesignDetailPage() {
   const isOwner = patent.user_id === user?.id
   const isConverted = patent.status === 'CONVERTED'
   const warnings = patent.warnings ?? []
+  const sourceViews = patent.source_image_views ?? []
 
   let mainLabel = null
   let subLabel = null
@@ -277,6 +278,27 @@ export default function DesignDetailPage() {
           {actionError && <p className="error">{actionError}</p>}
         </aside>
       </div>
+
+      {sourceViews.length > 0 && (
+        <section className="detail-sources">
+          <h3>Source images</h3>
+          <p className="meta">
+            The reference photos this model was generated from.
+          </p>
+          <div className="detail-sources-grid">
+            {sourceViews.map((view) => (
+              <figure key={view} className="detail-source">
+                <img
+                  src={`/api/patents/${patent.id}/images/${view}`}
+                  alt={`${view} view`}
+                  loading="lazy"
+                />
+                <figcaption>{view}</figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
 
       {warnings.length > 0 && (
         <section className="detail-warnings">

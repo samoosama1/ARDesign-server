@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api/client'
+import { useLocarnoTree } from '../hooks/useLocarnoTree'
+import Combobox from '../components/Combobox'
 import RegistrationWizard from '../components/RegistrationWizard'
 
 const VIEWS = ['front', 'left', 'right', 'back']
@@ -24,9 +26,31 @@ export default function UploadPage() {
 
   const [views, setViews] = useState({})
   const [genTitle, setGenTitle] = useState('')
+  const [mainClass, setMainClass] = useState('')
+  const [subclass, setSubclass] = useState('')
   const [quality, setQuality] = useState('standard')
   const [detail, setDetail] = useState('high')
   const [generating, setGenerating] = useState(false)
+
+  // Same Locarno classification the ZIP-upload wizard uses. Loaded only while
+  // the image tab is the one in view.
+  const { tree, loading: treeLoading } = useLocarnoTree(activeTab === 'image')
+  const mainOptions = useMemo(() => {
+    if (!tree) return []
+    return tree.main_classes.map((m) => ({
+      value: m.value,
+      label: `Class ${m.number}: ${m.label}`,
+    }))
+  }, [tree])
+  const subOptions = useMemo(() => {
+    if (!tree || !mainClass) return []
+    return tree.subclasses_by_main[mainClass] || []
+  }, [tree, mainClass])
+
+  function handleMainChange(v) {
+    setMainClass(v)
+    setSubclass('')
+  }
 
   const previews = useMemo(() => {
     const out = {}
@@ -58,6 +82,10 @@ export default function UploadPage() {
       setError('Front view is required.')
       return
     }
+    if (!mainClass || !subclass) {
+      setError('Choose a Locarno main class and subclass.')
+      return
+    }
 
     setGenerating(true)
     try {
@@ -66,6 +94,8 @@ export default function UploadPage() {
         if (views[v]) form.append(v, views[v])
       })
       if (genTitle.trim()) form.append('title', genTitle.trim())
+      form.append('locarno_main_class', mainClass)
+      form.append('locarno_subclass', subclass)
       form.append('quality', quality)
       form.append('detail', detail)
 
@@ -77,6 +107,8 @@ export default function UploadPage() {
 
       setViews({})
       setGenTitle('')
+      setMainClass('')
+      setSubclass('')
       navigate('/browse')
     } catch (err) {
       setError(err.message)
@@ -174,6 +206,36 @@ export default function UploadPage() {
                 )
               })}
             </div>
+
+            <div className="mv-locarno">
+              <label className="wizard-field">
+                <span>Locarno main class</span>
+                <Combobox
+                  options={mainOptions}
+                  value={mainClass}
+                  onChange={handleMainChange}
+                  placeholder={treeLoading ? 'Loading…' : 'Type to filter, e.g. furniture, foodstuffs'}
+                  disabled={treeLoading || !tree}
+                />
+              </label>
+              <label className="wizard-field">
+                <span>Locarno subclass</span>
+                <Combobox
+                  options={subOptions}
+                  value={subclass}
+                  onChange={setSubclass}
+                  placeholder={
+                    treeLoading
+                      ? 'Loading…'
+                      : mainClass
+                      ? 'Type to filter subclasses'
+                      : 'Pick a main class first'
+                  }
+                  disabled={treeLoading || !mainClass}
+                />
+              </label>
+            </div>
+
             <div className="mv-presets">
               <div className="mv-preset-group">
                 <span className="mv-preset-label">Quality</span>
@@ -226,7 +288,10 @@ export default function UploadPage() {
                 value={genTitle}
                 onChange={(e) => setGenTitle(e.target.value)}
               />
-              <button type="submit" disabled={generating || !views.front}>
+              <button
+                type="submit"
+                disabled={generating || !views.front || !mainClass || !subclass}
+              >
                 {generating ? 'Starting...' : 'Generate 3D Model'}
               </button>
             </div>

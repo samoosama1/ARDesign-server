@@ -46,6 +46,10 @@ class PatentListItem(BaseModel):
     warnings: list[ConversionWarning] | None = Field(
         default=None, validation_alias="conversion_warnings"
     )
+    # For image-gen patents only: the ordered view labels (e.g. ["front",
+    # "left"]) the model was generated from. Each maps to a stored source image
+    # served at GET /patents/{id}/images/{view}. None for ZIP uploads.
+    source_image_views: list[str] | None = None
 
     class Config:
         from_attributes = True

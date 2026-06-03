@@ -941,6 +941,13 @@ header.app > h1 { font-size: 1.5rem; }
 
 /* ── Preset chips (Quality / Detail) ──────────────────── */
 
+.mv-locarno {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
 .mv-presets {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -949,7 +956,8 @@ header.app > h1 { font-size: 1.5rem; }
 }
 
 @media (max-width: 640px) {
-  .mv-presets { grid-template-columns: 1fr; }
+  .mv-presets,
+  .mv-locarno { grid-template-columns: 1fr; }
 }
 
 .mv-preset-group { display: flex; flex-direction: column; gap: 0.35rem; }
@@ -1146,13 +1154,37 @@ header.app > h1 { font-size: 1.5rem; }
 
 .detail-actions { margin-top: 0; }
 
-.detail-warnings {
+.detail-warnings,
+.detail-sources {
   background: var(--bg-card);
   border-radius: 16px;
   padding: 1.5rem;
   box-shadow: var(--shadow-sm);
 }
-.detail-warnings h3 { margin-bottom: 0.5rem; }
+.detail-warnings h3,
+.detail-sources h3 { margin-bottom: 0.5rem; }
+
+.detail-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.detail-source { margin: 0; }
+.detail-source img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: var(--bg-muted);
+  border-radius: 10px;
+}
+.detail-source figcaption {
+  margin-top: 0.4rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
 
 @media (max-width: 720px) {
   .detail-grid { grid-template-columns: 1fr; }
