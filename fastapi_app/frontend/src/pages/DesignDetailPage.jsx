@@ -32,6 +32,7 @@ export default function DesignDetailPage() {
   const [error, setError] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   const [actionError, setActionError] = useState(null)
+  const [show3d, setShow3d] = useState(false)
   const pollRef = useRef(null)
 
   const fetchPatent = useCallback(async () => {
@@ -64,6 +65,12 @@ export default function DesignDetailPage() {
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null))
   }, [patent])
+
+  // Collapse the 3D viewer if the model stops being available (e.g. a re-convert
+  // flips status back to QUEUED) so we never point model-viewer at a stale URL.
+  useEffect(() => {
+    if (patent?.status !== 'CONVERTED') setShow3d(false)
+  }, [patent?.status])
 
   // Stop polling if the user navigates away mid-conversion.
   useEffect(() => () => {
@@ -181,7 +188,7 @@ export default function DesignDetailPage() {
 
       <div className="detail-grid">
         <div className="detail-media">
-          {isConverted ? (
+          {isConverted && show3d ? (
             <model-viewer
               src={`/api/patents/${patent.id}/model`}
               camera-controls
@@ -201,6 +208,15 @@ export default function DesignDetailPage() {
               <span aria-hidden="true">🖼</span>
               <span>No preview</span>
             </div>
+          )}
+          {isConverted && !show3d && (
+            <button
+              type="button"
+              className="view-3d-btn"
+              onClick={() => setShow3d(true)}
+            >
+              ▶ View in 3D
+            </button>
           )}
         </div>
 
