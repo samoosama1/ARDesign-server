@@ -89,6 +89,32 @@ Safest rule: run everything from `/app/converter` and read `output.glb` /
   single python invocation handles both CAD and non-CAD — no second interpreter.
 - `gc.disable()` + `faulthandler.enable()` are set in `main.py`.
 
+## Thumbnail rendering (we drive this; not the friend's code)
+
+`tasks.py`'s `generate_thumbnail_task` reuses this image to render a PNG preview
+of the converted GLB via `app/worker/thumbnail.py` (copied into the container at
+`/tmp/thumbnail.py`, run with the same venv python). Hard-won facts:
+
+- **Use Cycles on CPU, not EEVEE/Workbench.** The Dockerfile installs Xvfb +
+  X11/EGL *dev* libs but **no mesa software-GL driver** (`libgl1-mesa-dri` /
+  llvmpipe). EEVEE and Workbench need a live GL context and can't be trusted on
+  this GPU-less box; Cycles' CPU path tracer needs no GL at all. Conversion
+  "works" only because GLTF import/export is pure data — it never renders, so a
+  working converter does NOT imply a working GL stack.
+- Verified end-to-end in the live `youndria/arpatent:1.5` container: a 512² /
+  32-sample denoised Cycles-CPU render of a real DRACO GLB takes ~4s and comes
+  out correctly framed with textures and a transparent background.
+- `bpy.ops.import_scene.gltf(...)` and `bpy.ops.wm.read_factory_settings(
+  use_empty=True)` are the same operators `convert_non_cad_formats.py` uses, so
+  they're known-good on this Blender 5.0 build.
+
+## Where the converter source lives now
+
+A read-only snapshot of the in-image converter source (the `.py` files,
+`Dockerfile`, requirements) is checked in at `app/worker/converter_src/`, pulled
+from the running container. Read that instead of re-exec'ing into the container
+for context. Re-pull only when the image tag is bumped.
+
 ## Gotcha: the image ENTRYPOINT is a broken red herring
 
 The image's `ENTRYPOINT` is `["xvfb-run","-a","/venv/bin/python3.11","test.py"]`,

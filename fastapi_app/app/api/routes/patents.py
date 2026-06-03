@@ -5,6 +5,7 @@ Upload flow  : POST /patents/upload      -> 202, patent stored as ZIP
 Convert flow : POST /patents/{id}/convert -> 202, task dispatched to Celery
 Status poll  : GET  /patents/{id}/status  -> current ConversionStatus
 Model serve  : GET  /patents/{id}/model   -> streams GLB (only when CONVERTED)
+Thumbnail    : GET  /patents/{id}/thumbnail -> streams PNG preview (best-effort)
 List         : GET  /patents/             -> all patents ordered by upload date
 Delete       : DELETE /patents/{id}       -> delete patent and files
 """
@@ -367,6 +368,7 @@ async def list_patents(
             uploaded_at=p.uploaded_at,
             locarno_main_class=p.locarno_main_class,
             locarno_subclass=p.locarno_subclass,
+            has_thumbnail=bool(p.thumbnail_path),
             conversion_warnings=p.conversion_warnings or None,
         )
         for p in patents
@@ -401,6 +403,27 @@ async def serve_model(
         media_type="model/gltf-binary",
         filename=f"{patent.model_filename}.glb",
     )
+
+
+# -- Serve thumbnail -----------------------------------------------------------
+
+@router.get("/{patent_id}/thumbnail")
+async def serve_thumbnail(
+    patent_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the PNG thumbnail. Public (like /model) so the browse grid and
+    QR-scanned clients can show a preview. 404 when the patent never produced a
+    thumbnail (the render is best-effort) — callers should fall back gracefully."""
+    patent = await db.get(Patent, patent_id)
+    if not patent or not patent.thumbnail_path:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thumbnail not found.")
+
+    thumb_abs = os.path.join(settings.media_root, patent.thumbnail_path)
+    if not os.path.exists(thumb_abs):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thumbnail missing from storage.")
+
+    return FileResponse(thumb_abs, media_type="image/png")
 
 
 # -- Delete --------------------------------------------------------------------

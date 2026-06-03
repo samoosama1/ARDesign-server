@@ -42,6 +42,7 @@ class PatentListItem(BaseModel):
     uploaded_at: datetime
     locarno_main_class: str | None = None
     locarno_subclass: str | None = None
+    has_thumbnail: bool = False
     warnings: list[ConversionWarning] | None = Field(
         default=None, validation_alias="conversion_warnings"
     )

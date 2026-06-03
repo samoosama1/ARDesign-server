@@ -45,6 +45,15 @@ export default function DesignCard({
 
   return (
     <div className="patent-card">
+      {patent.has_thumbnail && (
+        <div className="card-thumb">
+          <img
+            src={`/api/patents/${patent.id}/thumbnail`}
+            alt={patent.model_filename}
+            loading="lazy"
+          />
+        </div>
+      )}
       <h3>{patent.model_filename}</h3>
       <div className="card-status-row">
         <span className={statusClass(patent.status)}>{statusLabel(patent.status)}</span>

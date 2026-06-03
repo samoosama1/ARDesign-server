@@ -119,6 +119,39 @@ def _docker(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
 
 
+def _converter_create_cmd(
+    container_name: str, script: str, script_args: list[str]
+) -> list[str]:
+    """Build the `docker create` argv for an ephemeral, hardened converter
+    container that runs `bash -c <script> _ <script_args...>`.
+
+    Centralizes the resource limits + security hardening so the converter and
+    the thumbnailer can't drift apart (same single-source-of-truth reasoning
+    that keeps CONVERTER_IMAGE in celery_app). The script_args become $1, $2…
+    positional data args — never interpolated into the script text, so they're
+    unreachable by shell injection."""
+    return [
+        "docker", "create",
+        "--name", container_name,
+        "--init",
+        # Resource limits
+        "--memory", CONTAINER_MEMORY,
+        "--memory-swap", CONTAINER_MEMORY,   # no swap beyond memory limit
+        "--cpus", CONTAINER_CPUS,
+        "--pids-limit", CONTAINER_PIDS,
+        # Security hardening
+        "--network", "none",                 # no network access
+        "--cap-drop", "ALL",                 # drop all Linux capabilities
+        "--security-opt", "no-new-privileges",
+        # Entrypoint
+        "--entrypoint", "bash",
+        CONVERTER_IMAGE,
+        "-c", script, "_", *script_args,
+        #     ^^^^^^       ^^^^^^^^^^^
+        #     script text  $1, $2... = data args (safe from injection)
+    ]
+
+
 def _collect_converter_warnings(container_name: str) -> list[dict]:
     """Pull import_errors.json / export_errors.json out of the container,
     tag each entry with its phase, and return a merged list. Missing or
@@ -198,26 +231,7 @@ def convert_patent_task(self, patent_id: int) -> None:
         script_args = [model_arg, scale_arg]
 
         # -- 5. Create container (no volume mounts — fully isolated) -------------
-        create_cmd = [
-            "docker", "create",
-            "--name", container_name,
-            "--init",
-            # Resource limits
-            "--memory", CONTAINER_MEMORY,
-            "--memory-swap", CONTAINER_MEMORY,   # no swap beyond memory limit
-            "--cpus", CONTAINER_CPUS,
-            "--pids-limit", CONTAINER_PIDS,
-            # Security hardening
-            "--network", "none",                 # no network access
-            "--cap-drop", "ALL",                 # drop all Linux capabilities
-            "--security-opt", "no-new-privileges",
-            # Entrypoint
-            "--entrypoint", "bash",
-            CONVERTER_IMAGE,
-            "-c", script, "_", *script_args,
-            #     ^^^^^^       ^^^^^^^^^^^
-            #     script text  $1, $2... = data args (safe from injection)
-        ]
+        create_cmd = _converter_create_cmd(container_name, script, script_args)
 
         logger.info("Creating converter container %s for patent %d",
                      container_name, patent_id)
@@ -260,12 +274,17 @@ def convert_patent_task(self, patent_id: int) -> None:
             logger.info("Patent %d converted with %d warning(s)",
                          patent_id, len(warnings))
 
-        # -- 10. Persist success -------------------------------------------------
+        # -- 10. Persist GLB, then hand off to the thumbnailer -------------------
+        # The patent stays CONVERTING here: generate_thumbnail_task makes the
+        # final flip to CONVERTED (best-effort) so a model is only marked
+        # "ready" once we've at least *tried* to render its thumbnail. A
+        # thumbnail failure still lands the patent on CONVERTED — see that task.
         patent.glb_file_path = glb_rel
-        patent.conversion_status = ConversionStatus.CONVERTED
         patent.conversion_warnings = warnings or None
         db.commit()
-        logger.info("Patent %d converted successfully -> %s", patent_id, glb_rel)
+        generate_thumbnail_task.delay(patent_id)
+        logger.info("Patent %d converted -> %s; queued thumbnail render",
+                     patent_id, glb_rel)
 
     except Exception as exc:
         logger.exception("Conversion failed for patent %d", patent_id)
@@ -275,6 +294,113 @@ def convert_patent_task(self, patent_id: int) -> None:
             db.commit()
     finally:
         # Always remove the container, even on failure/timeout
+        _docker(["docker", "rm", "-f", container_name])
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail rendering (Blender inside the converter image)
+# ---------------------------------------------------------------------------
+
+# Local path to the headless Blender renderer we inject into the container.
+# It ships beside this module; the container has no copy of its own.
+_THUMBNAIL_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "thumbnail.py")
+
+# Runs thumbnail.py against the GLB inside the container. $1 = input GLB path,
+# $2 = output PNG path. Run from /app/converter for parity with the converter
+# (that's where the bpy site/addon state lives). The Cycles-CPU render needs no
+# GL context, but we keep xvfb-run for parity since some bpy operators still
+# expect a window. `set -e` makes any render failure a non-zero exit, which the
+# task treats as "no thumbnail" without blocking the model.
+THUMBNAIL_SCRIPT = (
+    "set -e\n"
+    "mkdir -p /output\n"
+    "cd /app/converter\n"
+    "xvfb-run -a /app/converter/venv/bin/python3.11 /tmp/thumbnail.py \"$1\" \"$2\"\n"
+)
+
+
+@celery_app.task(bind=True, max_retries=0, name="generate_thumbnail")
+def generate_thumbnail_task(self, patent_id: int) -> None:
+    """Render a PNG thumbnail of a patent's converted GLB, then flip it to
+    CONVERTED.
+
+    Enqueued by convert_patent_task once the GLB is on disk. Both the upload and
+    the image-generation pipelines funnel through that task, so this single hook
+    covers both ingestion paths.
+
+    Thumbnailing is best-effort: we try exactly once (max_retries=0) and the
+    patent becomes available (CONVERTED) whether or not the render succeeds — a
+    missing thumbnail must never gate an otherwise-finished model. The render
+    runs in the same hardened, network-less converter container as conversion.
+    """
+    db = SyncSessionLocal()
+    patent: Patent | None = None
+    container_name = f"thumbnailer-{patent_id}-{uuid.uuid4().hex[:8]}"
+
+    try:
+        patent = db.get(Patent, patent_id)
+        if not patent:
+            logger.error("generate_thumbnail_task: patent %d not found", patent_id)
+            return
+        if not patent.glb_file_path:
+            raise RuntimeError("patent has no glb_file_path to thumbnail")
+
+        glb_abs = os.path.join(settings.media_root, patent.glb_file_path)
+        if not os.path.exists(glb_abs):
+            raise FileNotFoundError(f"GLB missing at {glb_abs}")
+
+        # Thumbnail lives next to the GLB so delete_patent_files' glb-dir sweep
+        # cleans it up for free.
+        thumb_rel = f"{os.path.dirname(patent.glb_file_path)}/thumbnail.png"
+        thumb_abs = os.path.join(settings.media_root, thumb_rel)
+
+        create_cmd = _converter_create_cmd(
+            container_name, THUMBNAIL_SCRIPT,
+            ["/tmp/model.glb", "/output/thumbnail.png"],
+        )
+        logger.info("Creating thumbnailer container %s for patent %d",
+                    container_name, patent_id)
+        _docker(create_cmd, check=True)
+
+        # Copy in the GLB plus the renderer script (the image has neither).
+        _docker(["docker", "cp", glb_abs, f"{container_name}:/tmp/model.glb"],
+                check=True)
+        _docker(["docker", "cp", _THUMBNAIL_SCRIPT_PATH,
+                 f"{container_name}:/tmp/thumbnail.py"], check=True)
+
+        result = _docker(
+            ["docker", "start", "-a", container_name], timeout=CONTAINER_TIMEOUT,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Thumbnailer exited {result.returncode}.\n"
+                f"stdout: {result.stdout[-1000:]}\n"
+                f"stderr: {result.stderr[-1000:]}"
+            )
+
+        os.makedirs(os.path.dirname(thumb_abs), exist_ok=True)
+        _docker(
+            ["docker", "cp", f"{container_name}:/output/thumbnail.png", thumb_abs],
+            check=True,
+        )
+        if not os.path.exists(thumb_abs):
+            raise FileNotFoundError(f"Expected thumbnail not found at {thumb_abs}")
+
+        patent.thumbnail_path = thumb_rel
+        logger.info("Patent %d thumbnail rendered -> %s", patent_id, thumb_rel)
+
+    except Exception:
+        # Best-effort: log and fall through. The finally block still flips the
+        # patent to CONVERTED so a thumbnail failure never blocks the model.
+        logger.exception(
+            "Thumbnail render failed for patent %d; making it available without one",
+            patent_id,
+        )
+    finally:
+        if patent:
+            patent.conversion_status = ConversionStatus.CONVERTED
+            db.commit()
         _docker(["docker", "rm", "-f", container_name])
         db.close()
 
