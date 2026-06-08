@@ -10,7 +10,7 @@ export default function LandingPage() {
         <h1>Register your designs. Render them in 3D.</h1>
         <p className="lead">
           ARPatent turns your industrial design submissions into interactive
-          3D models — properly classified under the Locarno system, ready to
+          3D models, properly classified under the Locarno system, ready to
           view in your browser or scan into augmented reality.
         </p>
         <div className="landing-cta">
@@ -31,7 +31,7 @@ export default function LandingPage() {
             <div className="feature-icon">⊞</div>
             <h3>Register</h3>
             <p>
-              File a design under the WIPO Locarno classification — 32 main
+              File a design under the WIPO Locarno classification: 32 main
               classes, over 5,000 subclasses, indexed and searchable.
             </p>
           </div>
@@ -40,7 +40,7 @@ export default function LandingPage() {
             <h3>Convert</h3>
             <p>
               Upload a ZIP of OBJ / STL / STP / IGES / FBX, or just front and
-              side photos — we generate a clean GLB you can view anywhere.
+              side photos, and we generate a clean GLB you can view anywhere.
             </p>
           </div>
           <div className="feature-card">
@@ -48,7 +48,7 @@ export default function LandingPage() {
             <h3>Share</h3>
             <p>
               Every registered design gets a public 3D viewer URL and a QR
-              code — point a phone at it to open the model in AR.
+              code. Point a phone at it to open the model in AR.
             </p>
           </div>
         </div>
@@ -67,7 +67,7 @@ export default function LandingPage() {
           <div className="step">
             <h3>Classify it</h3>
             <p>
-              Tell us the Locarno main class and subclass — searchable
+              Tell us the Locarno main class and subclass. Searchable
               dropdowns make the right one easy to find.
             </p>
           </div>

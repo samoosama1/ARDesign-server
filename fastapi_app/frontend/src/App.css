@@ -562,11 +562,46 @@ header.app > h1 { font-size: 1.5rem; }
   border-left: 4px solid var(--color-primary);
 }
 .patent-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.patent-card-link { text-decoration: none; color: inherit; }
+
+.card-open-cta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
 
 .patent-card h3 {
   font-size: 1rem;
   word-break: break-all;
   color: var(--text-primary);
+}
+
+.card-thumb {
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-muted, #f1f3f5);
+  aspect-ratio: 1 / 1;
+}
+.card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.card-thumb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.card-thumb-empty span[aria-hidden] {
+  font-size: 1.8rem;
+  opacity: 0.5;
 }
 
 .patent-card .meta { font-size: 0.8rem; color: var(--text-muted); }
@@ -589,7 +624,8 @@ header.app > h1 { font-size: 1.5rem; }
 
 .status-uploaded { background: var(--color-info); }
 .status-queued { background: #94a3b8; }
-.status-in_processing { background: var(--color-warning); }
+.status-generating { background: var(--color-warning); }
+.status-converting { background: var(--color-warning); }
 .status-converted { background: var(--color-success); }
 .status-failed { background: var(--color-danger); }
 
@@ -905,6 +941,13 @@ header.app > h1 { font-size: 1.5rem; }
 
 /* ── Preset chips (Quality / Detail) ──────────────────── */
 
+.mv-locarno {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
 .mv-presets {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -913,7 +956,8 @@ header.app > h1 { font-size: 1.5rem; }
 }
 
 @media (max-width: 640px) {
-  .mv-presets { grid-template-columns: 1fr; }
+  .mv-presets,
+  .mv-locarno { grid-template-columns: 1fr; }
 }
 
 .mv-preset-group { display: flex; flex-direction: column; gap: 0.35rem; }
@@ -989,6 +1033,161 @@ header.app > h1 { font-size: 1.5rem; }
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+}
+
+/* ── Design detail page ─────────────────────────────────── */
+
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.back-link {
+  align-self: flex-start;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.back-link:hover { text-decoration: underline; }
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+.detail-header h1 {
+  margin: 0;
+  line-height: 1.2;
+  word-break: break-all;
+}
+/* Override the catalog pill's align-self so it centres on the title row */
+.detail-header .status { align-self: center; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.detail-media {
+  position: relative;
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.view-3d-btn {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.55rem 1.4rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: background 0.15s, transform 0.15s;
+}
+.view-3d-btn:hover {
+  background: var(--color-primary-hover);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.detail-media model-viewer {
+  width: 100%;
+  height: min(60vh, 480px);
+  background: var(--bg-muted);
+  border-radius: 12px;
+}
+.detail-media .card-thumb { aspect-ratio: 1 / 1; }
+
+.detail-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.detail-qr {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+.detail-qr h3 { font-size: 0.95rem; margin-bottom: 0.75rem; }
+.detail-qr img { width: 200px; max-width: 100%; }
+.detail-qr .qr-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+}
+.detail-meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+.detail-meta dt { color: var(--text-muted); }
+.detail-meta dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+.detail-actions { margin-top: 0; }
+
+.detail-warnings,
+.detail-sources {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+.detail-warnings h3,
+.detail-sources h3 { margin-bottom: 0.5rem; }
+
+.detail-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.detail-source { margin: 0; }
+.detail-source img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: var(--bg-muted);
+  border-radius: 10px;
+}
+.detail-source figcaption {
+  margin-top: 0.4rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+@media (max-width: 720px) {
+  .detail-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Registration wizard ────────────────────────────────── */
@@ -1115,3 +1314,437 @@ header.app > h1 { font-size: 1.5rem; }
 .combobox-option.highlight { background: var(--color-primary-soft); color: var(--color-primary); }
 .combobox-option.selected { font-weight: 600; }
 .combobox-empty { padding: 0.65rem 0.85rem; color: var(--text-muted); font-size: 0.85rem; }
+
+/* -- Admin panel ----------------------------------------------------------- */
+.admin-title { margin: 0.5rem 0 1rem; color: var(--text-primary); }
+.admin-section { margin-top: 1rem; }
+.admin-error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.admin-empty { color: var(--text-muted); text-align: center; padding: 1.5rem; }
+
+.admin-search, .admin-add-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.admin-search input, .admin-add-row input {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.admin-search input { flex: 1; min-width: 200px; }
+.admin-search button, .admin-add-row button,
+.admin-row-actions button, .locarno-actions button,
+.locarno-row button, .locarno-toggle {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.admin-search button:hover, .admin-add-row button:hover,
+.admin-row-actions button:hover:not(:disabled),
+.locarno-actions button:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+}
+.admin-row-actions button:disabled, .locarno-actions button:disabled { opacity: 0.4; cursor: default; }
+.btn-delete { color: var(--color-danger) !important; border-color: var(--color-danger-soft) !important; }
+.btn-delete:hover:not(:disabled) { background: var(--color-danger-soft) !important; }
+
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border-default);
+  vertical-align: middle;
+}
+.admin-table th { color: var(--text-muted); font-weight: 600; }
+.admin-row-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.admin-badge {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+}
+.admin-status { font-weight: 600; }
+.admin-status-CONVERTED { color: var(--color-success); }
+.admin-status-FAILED { color: var(--color-danger); }
+.admin-status-CONVERTING, .admin-status-QUEUED, .admin-status-GENERATING { color: var(--color-warning); }
+.admin-error-hint { color: var(--color-danger); cursor: help; }
+
+/* Locarno tree editor */
+.locarno-tree, .locarno-subs { list-style: none; margin: 0; padding: 0; }
+.locarno-subs { margin-left: 1.75rem; border-left: 2px solid var(--border-default); padding-left: 0.5rem; }
+.locarno-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--bg-muted);
+}
+.locarno-toggle { width: 1.8rem; }
+.locarno-num { min-width: 2rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.locarno-label { flex: 1; color: var(--text-primary); }
+.locarno-value { font-size: 0.75rem; color: var(--text-muted); background: var(--bg-muted); padding: 0.1rem 0.4rem; border-radius: 5px; }
+.locarno-edit { flex: 1; padding: 0.35rem 0.6rem; border: 1px solid var(--color-primary); border-radius: 8px; }
+.locarno-actions { display: flex; gap: 0.3rem; }
+
+/* Secondary button (used in dialogs and inline editing) */
+.btn-secondary {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-muted); color: var(--text-primary); }
+.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Locarno editor: clean tree + click-to-select + action band ── */
+
+/* Two-column workspace: tree on the left, sticky changes/save rail on the
+   right. The right rail is the "save bar" — it holds the count, Save/Discard
+   AND the diff blocks, so admins see everything they're about to commit
+   without scrolling. */
+.locarno-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas: "tree changes";
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .locarno-workspace {
+    grid-template-columns: 1fr;
+    grid-template-areas: "changes" "tree";
+  }
+}
+.locarno-tree-col { grid-area: tree; min-width: 0; }
+.locarno-changes-col {
+  grid-area: changes;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  padding: 0.85rem 0.95rem 1rem;
+}
+.locarno-changes-col.is-dirty { border-color: var(--color-accent); }
+@media (max-width: 900px) {
+  .locarno-changes-col { position: static; max-height: none; }
+}
+
+.locarno-changes-col .locarno-changes-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.locarno-changes-heading { display: flex; align-items: baseline; gap: 0.6rem; }
+.locarno-changes-heading h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+.locarno-changes-count { color: var(--text-muted); font-size: 0.85rem; }
+.locarno-changes-col.is-dirty .locarno-changes-count { color: var(--color-warning); font-weight: 600; }
+.locarno-changes-actions { display: flex; gap: 0.5rem; }
+.locarno-changes-actions .btn-primary,
+.locarno-changes-actions .btn-secondary { flex: 1; }
+
+.locarno-changes-empty {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.25rem;
+}
+
+
+/* Slim toolbar above the tree — adding a class lives here, not in rows. */
+.locarno-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.locarno-toolbar .btn-link {
+  background: none;
+  border: 1px dashed var(--border-default);
+  color: var(--text-secondary);
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.locarno-toolbar .btn-link:hover { color: var(--color-primary); border-color: var(--color-primary); }
+.locarno-toolbar .locarno-inline-form { display: flex; gap: 0.5rem; flex: 1; min-width: 0; flex-wrap: wrap; }
+.locarno-toolbar input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+.locarno-toolbar input[name="value"]  { flex: 2; min-width: 8rem; }
+.locarno-toolbar input[name="number"] { width: 5rem; }
+.locarno-toolbar input[name="label"]  { flex: 3; min-width: 10rem; }
+
+/* The tree itself. One column. Rows have NO buttons; selection drives editing. */
+.locarno-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+.locarno-subs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: #fbfaff;
+  border-top: 1px solid var(--border-default);
+}
+
+.locarno-row {
+  display: grid;
+  grid-template-columns: 1.6rem 2.5rem 1fr auto auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--bg-muted);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+.locarno-row:hover { background: var(--bg-muted); }
+.locarno-row:last-child { border-bottom: 0; }
+.locarno-sub { grid-template-columns: 1.6rem 1fr auto auto; padding-left: 2.4rem; }
+
+/* Explicit "click here for options" affordance on every row.
+   Visible at all times — including touch — and doubles as a close button
+   when the action band is open. */
+.locarno-row-actions-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.locarno-row-actions-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--bg-card);
+}
+.locarno-row-actions-btn.is-open {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+  font-size: 0.85rem;
+}
+.locarno-row:hover .locarno-row-actions-btn:not(.is-open) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.locarno-toggle {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+}
+.locarno-toggle:hover { background: var(--bg-card); color: var(--text-primary); }
+.locarno-toggle.is-leaf { visibility: hidden; }
+
+.locarno-num {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+.locarno-label {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.locarno-value {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  padding: 0.15rem 0.5rem;
+  border-radius: 5px;
+  font-family: ui-monospace, monospace;
+}
+
+/* Selected row — clear primary-tinted bar, no shouting */
+.locarno-row.is-selected {
+  background: var(--color-primary-soft);
+  box-shadow: inset 3px 0 0 0 var(--color-primary);
+}
+.locarno-row.is-selected:hover { background: var(--color-primary-soft); }
+
+/* Small status dot at the right of a row that has unsaved changes touching it.
+   Subtle in-context cue without tinting the whole row. */
+.locarno-change-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 0.4rem;
+  flex-shrink: 0;
+}
+.locarno-change-dot.is-add    { background: var(--color-success); }
+.locarno-change-dot.is-edit   { background: var(--color-warning); }
+.locarno-change-dot.is-reorder { background: var(--color-info); }
+
+/* Action band — slides in directly under the selected row. ONE at a time;
+   uncramped buttons; sits in its own band so long values can't shove them off. */
+.locarno-action-band {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.65rem 0.9rem 0.65rem 3.5rem;
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--bg-muted);
+}
+.locarno-action-band.is-sub { padding-left: 4.9rem; }
+.locarno-action-band button {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.locarno-action-band button:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.locarno-action-band button:disabled { opacity: 0.4; cursor: default; }
+.locarno-action-band .btn-delete {
+  color: var(--color-danger);
+  border-color: var(--color-danger-soft);
+  margin-left: auto; /* push destructive to the right so it isn't the first thing thumbs land on */
+}
+.locarno-action-band input {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 7px;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 8rem;
+}
+
+/* ── Change blocks (rendered inside the sticky rail AND the save dialog) ── */
+
+.locarno-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.locarno-change-block {
+  border: 1px solid var(--border-default);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  padding: 0.7rem 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: start;
+}
+.locarno-change-block.kind-add    { border-left-color: var(--color-success); }
+.locarno-change-block.kind-remove { border-left-color: var(--color-danger); }
+.locarno-change-block.kind-edit   { border-left-color: var(--color-warning); }
+.locarno-change-block.kind-reorder { border-left-color: var(--color-info); }
+
+.locarno-change-kind {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.locarno-change-block.kind-add    .locarno-change-kind { color: var(--color-success); }
+.locarno-change-block.kind-remove .locarno-change-kind { color: var(--color-danger); }
+.locarno-change-block.kind-edit   .locarno-change-kind { color: var(--color-warning); }
+.locarno-change-block.kind-reorder .locarno-change-kind { color: var(--color-info); }
+
+.locarno-change-body { font-size: 0.92rem; color: var(--text-primary); line-height: 1.45; min-width: 0; }
+.locarno-change-body code {
+  background: var(--bg-muted);
+  font-size: 0.78rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin: 0 0.15rem;
+  font-family: ui-monospace, monospace;
+}
+.locarno-change-body .from { color: var(--text-muted); text-decoration: line-through; }
+.locarno-change-body .to   { color: var(--text-primary); font-weight: 600; }
+.locarno-change-body .arrow { margin: 0 0.4rem; color: var(--text-muted); }
+.locarno-change-body ul { margin: 0.35rem 0 0 1.1rem; padding: 0; }
+.locarno-change-body li { margin: 0.1rem 0; }
+
+.locarno-undo {
+  align-self: start;
+  background: none;
+  border: 0;
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+}
+.locarno-undo:hover { text-decoration: underline; }
+
+/* Confirmation dialog (replaces window.confirm across the admin panel) */
+.confirm-dialog { text-align: left; max-width: 460px; width: calc(100% - 2rem); }
+.confirm-title { margin: 0 0 0.75rem; font-size: 1.1rem; color: var(--text-primary); }
+.confirm-body { margin-bottom: 1.1rem; max-height: 45vh; overflow-y: auto; }
+.confirm-lead { margin: 0 0 0.5rem; color: var(--text-secondary); font-size: 0.92rem; line-height: 1.4; }
+.confirm-warn {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+}
+.confirm-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+/* The dialog's own buttons override the generic .modal button reset */
+.confirm-dialog .btn-primary { background: var(--color-primary); color: #fff; border: 0; }
+.confirm-dialog .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.confirm-dialog .btn-delete {
+  background: var(--color-danger) !important;
+  color: #fff !important;
+  border: 0 !important;
+}
+.confirm-dialog .btn-delete:hover:not(:disabled) { filter: brightness(0.93); }

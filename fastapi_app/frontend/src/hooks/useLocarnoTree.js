@@ -5,6 +5,13 @@ import { apiFetch } from '../api/client'
 let cache = null
 let inflight = null
 
+// Call after an admin edits the Locarno tree so Browse/Upload refetch the
+// updated classification instead of serving the stale session copy.
+export function clearLocarnoTreeCache() {
+  cache = null
+  inflight = null
+}
+
 export function loadLocarnoTree() {
   if (cache) return Promise.resolve(cache)
   if (inflight) return inflight

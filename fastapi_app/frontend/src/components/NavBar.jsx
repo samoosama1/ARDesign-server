@@ -21,6 +21,11 @@ export default function NavBar() {
         <NavLink to="/upload" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
           Upload
         </NavLink>
+        {user?.role === 'ADMIN' && (
+          <NavLink to="/admin" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+            Admin
+          </NavLink>
+        )}
       </nav>
 
       <div className="nav-right">

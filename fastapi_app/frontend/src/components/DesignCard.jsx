@@ -1,30 +1,21 @@
-import ActionButton from './ActionButton'
+import { Link } from 'react-router-dom'
+import { statusLabel } from '../statusLabels'
 
 function statusClass(status) {
   return 'status status-' + status.toLowerCase()
 }
 
 /**
- * Renders one design in a card grid. Action buttons are conditional on
- * ownership and status — handlers passed as props; the card itself owns
- * no API state.
+ * Compact catalog tile for one design. The card itself is a link to the
+ * design's dedicated page (/designs/:id) where all the actions and the QR
+ * code live; we pass the already-loaded `patent` via router state so the
+ * detail page can render instantly while it revalidates.
  *
  * `locarnoTree` is the shape returned by GET /api/locarno; we use it to
  * resolve the patent's class/subclass codes to human-readable labels on
  * the client (the API only ships the codes).
  */
-export default function DesignCard({
-  patent,
-  currentUserId,
-  locarnoTree,
-  onConvert,
-  onView,
-  onDownload,
-  onQR,
-  onDelete,
-  onWarnings,
-}) {
-  const isOwner = patent.user_id === currentUserId
+export default function DesignCard({ patent, locarnoTree }) {
   const warningCount = patent.warnings?.length ?? 0
 
   let mainLabel = null
@@ -43,19 +34,35 @@ export default function DesignCard({
   const locarnoLine = [mainLabel, subLabel].filter(Boolean).join(' › ')
 
   return (
-    <div className="patent-card">
+    <Link
+      to={`/designs/${patent.id}`}
+      state={{ patent }}
+      className="patent-card patent-card-link"
+    >
+      {patent.has_thumbnail ? (
+        <div className="card-thumb">
+          <img
+            src={`/api/patents/${patent.id}/thumbnail`}
+            alt={patent.model_filename}
+            loading="lazy"
+          />
+        </div>
+      ) : (
+        <div className="card-thumb card-thumb-empty">
+          <span aria-hidden="true">🖼</span>
+          <span>No preview</span>
+        </div>
+      )}
       <h3>{patent.model_filename}</h3>
       <div className="card-status-row">
-        <span className={statusClass(patent.status)}>{patent.status}</span>
-        {warningCount > 0 && onWarnings && (
-          <button
-            type="button"
+        <span className={statusClass(patent.status)}>{statusLabel(patent.status)}</span>
+        {warningCount > 0 && (
+          <span
             className="warning-badge"
-            onClick={() => onWarnings(patent)}
-            title={`${warningCount} warning${warningCount === 1 ? '' : 's'} from the converter — click for details`}
+            title={`${warningCount} converter warning${warningCount === 1 ? '' : 's'}`}
           >
             ⚠ {warningCount}
-          </button>
+          </span>
         )}
       </div>
       {locarnoLine && <p className="meta locarno-line">{locarnoLine}</p>}
@@ -63,46 +70,7 @@ export default function DesignCard({
       <p className="meta">Uploaded by: {patent.uploaded_by}</p>
       <p className="meta">{new Date(patent.uploaded_at).toLocaleDateString()}</p>
 
-      {isOwner && patent.status === 'UPLOADED' && onConvert && (
-        <div className="card-actions">
-          <ActionButton variant="primary" onClick={() => onConvert(patent.id)}>
-            Convert
-          </ActionButton>
-        </div>
-      )}
-      {patent.status === 'CONVERTED' && (
-        <div className="card-actions">
-          {onView && (
-            <ActionButton variant="primary" onClick={() => onView(patent)}>
-              View
-            </ActionButton>
-          )}
-          {onDownload && (
-            <ActionButton onClick={() => onDownload(patent.id, patent.model_filename)}>
-              Download
-            </ActionButton>
-          )}
-          {onQR && (
-            <ActionButton onClick={() => onQR(patent.id, patent.model_filename)}>
-              QR Code
-            </ActionButton>
-          )}
-        </div>
-      )}
-      {isOwner && patent.status === 'FAILED' && patent.file_type !== 'IMAGE' && onConvert && (
-        <div className="card-actions">
-          <ActionButton variant="primary" onClick={() => onConvert(patent.id)}>
-            Retry
-          </ActionButton>
-        </div>
-      )}
-      {isOwner && onDelete && (
-        <div className="card-actions">
-          <ActionButton variant="danger" onClick={() => onDelete(patent.id)}>
-            Delete
-          </ActionButton>
-        </div>
-      )}
-    </div>
+      <span className="card-open-cta">View details →</span>
+    </Link>
   )
 }

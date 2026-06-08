@@ -7,3 +7,6 @@ out.txt
 /fastapi_app/frontend/.vite
 .env
 .research
+
+# Local reference snapshot of the in-image converter source — not ours to ship.
+/fastapi_app/app/worker/converter_src/

@@ -5,6 +5,7 @@ Upload flow  : POST /patents/upload      -> 202, patent stored as ZIP
 Convert flow : POST /patents/{id}/convert -> 202, task dispatched to Celery
 Status poll  : GET  /patents/{id}/status  -> current ConversionStatus
 Model serve  : GET  /patents/{id}/model   -> streams GLB (only when CONVERTED)
+Thumbnail    : GET  /patents/{id}/thumbnail -> streams PNG preview (best-effort)
 List         : GET  /patents/             -> all patents ordered by upload date
 Delete       : DELETE /patents/{id}       -> delete patent and files
 """
@@ -51,6 +52,38 @@ MODEL_EXTENSIONS: dict[str, str] = {
 QUALITY_PRESETS: dict[str, int] = {"turbo": 5, "fast": 10, "standard": 30}
 DETAIL_PRESETS: dict[str, int] = {"low": 196, "standard": 256, "high": 384}
 
+# Canonical order for image-gen source views, so the detail page always shows
+# them front → left → right → back regardless of the dict's insertion order.
+VIEW_ORDER: dict[str, int] = {"front": 0, "left": 1, "right": 2, "back": 3}
+
+
+def _source_image_views(patent: Patent) -> list[str] | None:
+    """Ordered view labels for an image-gen patent, else None.
+
+    `related_files` is a dict of {view: filename} for image-gen patents and a
+    plain list of extracted files for ZIP uploads — only the former applies."""
+    if patent.file_type != FileType.IMAGE or not isinstance(patent.related_files, dict):
+        return None
+    return sorted(patent.related_files.keys(), key=lambda v: VIEW_ORDER.get(v, 99))
+
+
+def _patent_list_item(patent: Patent) -> PatentListItem:
+    """Build the public catalog/detail DTO from a Patent (with `user` loaded)."""
+    return PatentListItem(
+        id=patent.id,
+        user_id=patent.user_id,
+        uploaded_by=patent.user.username,
+        model_filename=patent.model_filename,
+        file_type=patent.file_type,
+        conversion_status=patent.conversion_status,
+        uploaded_at=patent.uploaded_at,
+        locarno_main_class=patent.locarno_main_class,
+        locarno_subclass=patent.locarno_subclass,
+        has_thumbnail=bool(patent.thumbnail_path),
+        conversion_warnings=patent.conversion_warnings or None,
+        source_image_views=_source_image_views(patent),
+    )
+
 
 def _sanitize_filename(name: str) -> str:
     """Strip to alphanumeric, dash, underscore, dot. Replace spaces with underscores."""
@@ -66,6 +99,33 @@ async def _get_owned_patent(patent_id: int, user: User, db: AsyncSession) -> Pat
     if patent.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your patent.")
     return patent
+
+
+def delete_patent_files(patent: Patent) -> None:
+    """Remove a patent's on-disk artifacts without touching anything else.
+
+    The converted GLB and (for image-gen) the source images each live in their
+    own per-patent directory, so we remove those directories whole. The uploaded
+    ZIP, however, is a lone file inside the shared `uploads/user_X/` directory
+    that also holds the user's other ZIPs — so we delete just that file, never
+    its parent. Same for an optional thumbnail. Shared by the owner delete and
+    the admin delete.
+    """
+    media_root = settings.media_root
+
+    # Per-patent directories — safe to remove whole.
+    if patent.glb_file_path:
+        glb_dir = os.path.dirname(os.path.join(media_root, patent.glb_file_path))
+        shutil.rmtree(glb_dir, ignore_errors=True)
+    if patent.storage_path:
+        shutil.rmtree(os.path.join(media_root, patent.storage_path), ignore_errors=True)
+
+    # Lone files in shared directories — remove only the file.
+    for rel_path in (patent.zip_file_path, patent.thumbnail_path):
+        if rel_path:
+            abs_path = os.path.join(media_root, rel_path)
+            if os.path.isfile(abs_path):
+                os.remove(abs_path)
 
 
 # -- Upload --------------------------------------------------------------------
@@ -149,20 +209,27 @@ async def generate_from_images(
     right: UploadFile | None = File(None, description="Right view (optional)"),
     back: UploadFile | None = File(None, description="Back view (optional)"),
     title: str | None = Form(None, description="Optional name for the generated model"),
+    locarno_main_class: str = Form(...),
+    locarno_subclass: str = Form(...),
     quality: str | None = Form(None, description="Quality preset: turbo|fast|standard"),
     detail: str | None = Form(None, description="Detail preset: low|standard|high"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Upload 1-4 view images. Validated, re-encoded to PNG, stored, and handed
-    off to the `generate` Celery queue which routes to the host-native
-    Hunyuan3D service. Returns 202 with QUEUED status; poll /status
-    or /list for progress (QUEUED → IN_PROCESSING → CONVERTED).
+    Upload 1-4 view images under a Locarno classification. Validated, re-encoded
+    to PNG, stored, and handed off to the `generate` Celery queue which routes to
+    the host-native Hunyuan3D service. Returns 202 with QUEUED status; poll
+    /status or /list for progress (QUEUED → GENERATING → QUEUED → CONVERTING →
+    CONVERTED).
 
     The Hunyuan3D-2mv model was trained on front/left/back — 'right' is
     accepted but may be ignored or degrade quality.
     """
+    # Same Locarno gate as the ZIP-upload path so every registered design,
+    # however it was produced, carries a valid classification.
+    await locarno_cache.validate_pair(db, locarno_main_class, locarno_subclass)
+
     # Resolve presets up-front so we fail fast on bad input.
     overrides: dict = {}
     if quality is not None:
@@ -211,11 +278,13 @@ async def generate_from_images(
 
     # Create the Patent row as QUEUED — generation is dispatched immediately
     # (unlike the ZIP flow where the user manually triggers convert), but the
-    # worker flips it to IN_PROCESSING when it actually picks the task up.
+    # worker flips it to GENERATING when it actually picks the task up.
     patent = Patent(
         user_id=current_user.id,
         file_type=FileType.IMAGE,
         model_filename=stem,
+        locarno_main_class=locarno_main_class,
+        locarno_subclass=locarno_subclass,
         storage_path=storage_rel,
         related_files=related,
         conversion_status=ConversionStatus.QUEUED,
@@ -244,7 +313,11 @@ async def request_conversion(
     """Enqueue a Celery task to convert the model to GLB."""
     patent = await _get_owned_patent(patent_id, current_user, db)
 
-    if patent.conversion_status in (ConversionStatus.QUEUED, ConversionStatus.IN_PROCESSING):
+    if patent.conversion_status in (
+        ConversionStatus.QUEUED,
+        ConversionStatus.GENERATING,
+        ConversionStatus.CONVERTING,
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Conversion already in progress.")
 
     if patent.conversion_status == ConversionStatus.CONVERTED:
@@ -325,21 +398,33 @@ async def list_patents(
 
     patents = (await db.execute(stmt)).scalars().all()
 
-    return [
-        PatentListItem(
-            id=p.id,
-            user_id=p.user_id,
-            uploaded_by=p.user.username,
-            model_filename=p.model_filename,
-            file_type=p.file_type,
-            conversion_status=p.conversion_status,
-            uploaded_at=p.uploaded_at,
-            locarno_main_class=p.locarno_main_class,
-            locarno_subclass=p.locarno_subclass,
-            conversion_warnings=p.conversion_warnings or None,
-        )
-        for p in patents
-    ]
+    return [_patent_list_item(p) for p in patents]
+
+
+# -- Detail --------------------------------------------------------------------
+
+@router.get("/{patent_id}", response_model=PatentListItem)
+async def get_patent(
+    patent_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch a single patent's catalog metadata for its detail page.
+
+    Public (like the list and /model endpoints) so anonymous visitors can open
+    a design's dedicated page directly. Owner-only actions (convert/delete) stay
+    behind their own auth-gated routes; this exposes only data already visible
+    via the public list.
+    """
+    stmt = (
+        select(Patent)
+        .where(Patent.id == patent_id)
+        .options(selectinload(Patent.user))
+    )
+    patent = (await db.execute(stmt)).scalar_one_or_none()
+    if not patent:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patent not found.")
+
+    return _patent_list_item(patent)
 
 
 # -- Serve GLB -----------------------------------------------------------------
@@ -372,6 +457,60 @@ async def serve_model(
     )
 
 
+# -- Serve thumbnail -----------------------------------------------------------
+
+@router.get("/{patent_id}/thumbnail")
+async def serve_thumbnail(
+    patent_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the PNG thumbnail. Public (like /model) so the browse grid and
+    QR-scanned clients can show a preview. 404 when the patent never produced a
+    thumbnail (the render is best-effort) — callers should fall back gracefully."""
+    patent = await db.get(Patent, patent_id)
+    if not patent or not patent.thumbnail_path:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thumbnail not found.")
+
+    thumb_abs = os.path.join(settings.media_root, patent.thumbnail_path)
+    if not os.path.exists(thumb_abs):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thumbnail missing from storage.")
+
+    return FileResponse(thumb_abs, media_type="image/png")
+
+
+# -- Serve source image (image-gen only) --------------------------------------
+
+@router.get("/{patent_id}/images/{view}")
+async def serve_source_image(
+    patent_id: int,
+    view: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream one of the reference photos an image-gen design was built from.
+
+    Public (like /model and /thumbnail) so the design's detail page can show the
+    source views. `view` is a label from the patent's related_files map (front /
+    left / right / back). 404 for ZIP uploads or unknown views."""
+    patent = await db.get(Patent, patent_id)
+    if (
+        not patent
+        or patent.file_type != FileType.IMAGE
+        or not patent.storage_path
+        or not isinstance(patent.related_files, dict)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image not found.")
+
+    filename = patent.related_files.get(view)
+    if not filename:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image not found.")
+
+    img_abs = os.path.join(settings.media_root, patent.storage_path, filename)
+    if not os.path.exists(img_abs):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Source image missing from storage.")
+
+    return FileResponse(img_abs, media_type="image/png")
+
+
 # -- Delete --------------------------------------------------------------------
 
 @router.delete("/{patent_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -383,16 +522,7 @@ async def delete_patent(
     """Delete a patent record and its files from disk."""
     patent = await _get_owned_patent(patent_id, current_user, db)
 
-    # Clean up files
-    for rel_path in [patent.glb_file_path, patent.zip_file_path]:
-        if rel_path:
-            abs_path = os.path.join(settings.media_root, rel_path)
-            # Remove the parent directory (e.g. converted/user_X/timestamp_stem/)
-            parent = os.path.dirname(abs_path)
-            if os.path.isdir(parent):
-                shutil.rmtree(parent, ignore_errors=True)
-            elif os.path.isfile(abs_path):
-                os.remove(abs_path)
+    delete_patent_files(patent)
 
     await db.delete(patent)
     await db.commit()

@@ -28,15 +28,12 @@ import requests
 from app.core.config import settings
 from app.db.sync_session import SyncSessionLocal
 from app.models.patent import ConversionStatus, ModelScale, Patent
-from app.worker.celery_app import celery_app
+from app.worker.celery_app import CONVERTER_IMAGE, celery_app
 
 logger = logging.getLogger(__name__)
 
 # Extensions that the converter accepts
 MODEL_EXTENSIONS = {".obj", ".stl", ".stp", ".iges", ".glb", ".fbx"}
-
-# Docker image that contains /app/converter/main.py and xvfb-run
-CONVERTER_IMAGE = "youndria/arpatent:1.4"
 
 # Resource limits for the ephemeral converter container
 CONTAINER_MEMORY = "12g"
@@ -105,14 +102,6 @@ CONVERT_SCRIPT = (
     "exit ${PYCODE:-1}\n"
 )
 
-# For GLB passthrough — no conversion needed, just copy.
-# $1 = absolute path to the .glb file inside /tmp/work.
-GLB_COPY_SCRIPT = (
-    f"{_EXTRACT} && "
-    "mkdir -p /output && "
-    'cp "$1" /output/output.glb'
-)
-
 
 def _find_model_file_in_zip(zip_abs_path: str) -> str:
     """Return the in-archive path of the first recognised 3-D model file."""
@@ -128,6 +117,39 @@ def _find_model_file_in_zip(zip_abs_path: str) -> str:
 def _docker(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     """Run a docker CLI command via the mounted socket."""
     return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
+
+def _converter_create_cmd(
+    container_name: str, script: str, script_args: list[str]
+) -> list[str]:
+    """Build the `docker create` argv for an ephemeral, hardened converter
+    container that runs `bash -c <script> _ <script_args...>`.
+
+    Centralizes the resource limits + security hardening so the converter and
+    the thumbnailer can't drift apart (same single-source-of-truth reasoning
+    that keeps CONVERTER_IMAGE in celery_app). The script_args become $1, $2…
+    positional data args — never interpolated into the script text, so they're
+    unreachable by shell injection."""
+    return [
+        "docker", "create",
+        "--name", container_name,
+        "--init",
+        # Resource limits
+        "--memory", CONTAINER_MEMORY,
+        "--memory-swap", CONTAINER_MEMORY,   # no swap beyond memory limit
+        "--cpus", CONTAINER_CPUS,
+        "--pids-limit", CONTAINER_PIDS,
+        # Security hardening
+        "--network", "none",                 # no network access
+        "--cap-drop", "ALL",                 # drop all Linux capabilities
+        "--security-opt", "no-new-privileges",
+        # Entrypoint
+        "--entrypoint", "bash",
+        CONVERTER_IMAGE,
+        "-c", script, "_", *script_args,
+        #     ^^^^^^       ^^^^^^^^^^^
+        #     script text  $1, $2... = data args (safe from injection)
+    ]
 
 
 def _collect_converter_warnings(container_name: str) -> list[dict]:
@@ -181,14 +203,13 @@ def convert_patent_task(self, patent_id: int) -> None:
             return
 
         # -- 1. Mark as in-flight ------------------------------------------------
-        patent.conversion_status = ConversionStatus.IN_PROCESSING
+        patent.conversion_status = ConversionStatus.CONVERTING
         patent.conversion_error = None
         db.commit()
 
         # -- 2. Locate the model file inside the stored ZIP ----------------------
         zip_abs_path = os.path.join(settings.media_root, patent.zip_file_path)
         model_in_zip = _find_model_file_in_zip(zip_abs_path)
-        model_ext = os.path.splitext(model_in_zip)[1].lower()
 
         # -- 3. Build output path on the worker's media volume -------------------
         # Use the design name (already filesystem-sanitized at upload time) so
@@ -200,40 +221,17 @@ def convert_patent_task(self, patent_id: int) -> None:
         glb_dir_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}"
         glb_rel = f"{glb_dir_rel}/output.glb"
 
-        # -- 4. Choose script and build positional arguments ---------------------
+        # -- 4. Build positional arguments ---------------------------------------
         # model_arg is passed as $1, scale_arg as $2 — never interpolated into
         # the script text, so neither is reachable by shell injection.
         model_arg = f"/tmp/work/{model_in_zip}"
         scale_arg = _SCALE_TO_CLI[ModelScale(patent.scale)]
 
-        if model_ext == ".glb":
-            script = GLB_COPY_SCRIPT
-            script_args = [model_arg]            # GLB_COPY_SCRIPT only reads $1
-        else:
-            script = CONVERT_SCRIPT
-            script_args = [model_arg, scale_arg]
+        script = CONVERT_SCRIPT
+        script_args = [model_arg, scale_arg]
 
         # -- 5. Create container (no volume mounts — fully isolated) -------------
-        create_cmd = [
-            "docker", "create",
-            "--name", container_name,
-            "--init",
-            # Resource limits
-            "--memory", CONTAINER_MEMORY,
-            "--memory-swap", CONTAINER_MEMORY,   # no swap beyond memory limit
-            "--cpus", CONTAINER_CPUS,
-            "--pids-limit", CONTAINER_PIDS,
-            # Security hardening
-            "--network", "none",                 # no network access
-            "--cap-drop", "ALL",                 # drop all Linux capabilities
-            "--security-opt", "no-new-privileges",
-            # Entrypoint
-            "--entrypoint", "bash",
-            CONVERTER_IMAGE,
-            "-c", script, "_", *script_args,
-            #     ^^^^^^       ^^^^^^^^^^^
-            #     script text  $1, $2... = data args (safe from injection)
-        ]
+        create_cmd = _converter_create_cmd(container_name, script, script_args)
 
         logger.info("Creating converter container %s for patent %d",
                      container_name, patent_id)
@@ -271,20 +269,22 @@ def convert_patent_task(self, patent_id: int) -> None:
             raise FileNotFoundError(f"Expected GLB not found at {glb_abs}")
 
         # -- 9. Pull soft warnings (optional) ------------------------------------
-        # Skipped for GLB passthrough since the converter doesn't run.
-        warnings: list[dict] = []
-        if model_ext != ".glb":
-            warnings = _collect_converter_warnings(container_name)
-            if warnings:
-                logger.info("Patent %d converted with %d warning(s)",
-                             patent_id, len(warnings))
+        warnings = _collect_converter_warnings(container_name)
+        if warnings:
+            logger.info("Patent %d converted with %d warning(s)",
+                         patent_id, len(warnings))
 
-        # -- 10. Persist success -------------------------------------------------
+        # -- 10. Persist GLB, then hand off to the thumbnailer -------------------
+        # The patent stays CONVERTING here: generate_thumbnail_task makes the
+        # final flip to CONVERTED (best-effort) so a model is only marked
+        # "ready" once we've at least *tried* to render its thumbnail. A
+        # thumbnail failure still lands the patent on CONVERTED — see that task.
         patent.glb_file_path = glb_rel
-        patent.conversion_status = ConversionStatus.CONVERTED
         patent.conversion_warnings = warnings or None
         db.commit()
-        logger.info("Patent %d converted successfully -> %s", patent_id, glb_rel)
+        generate_thumbnail_task.delay(patent_id)
+        logger.info("Patent %d converted -> %s; queued thumbnail render",
+                     patent_id, glb_rel)
 
     except Exception as exc:
         logger.exception("Conversion failed for patent %d", patent_id)
@@ -294,6 +294,113 @@ def convert_patent_task(self, patent_id: int) -> None:
             db.commit()
     finally:
         # Always remove the container, even on failure/timeout
+        _docker(["docker", "rm", "-f", container_name])
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail rendering (Blender inside the converter image)
+# ---------------------------------------------------------------------------
+
+# Local path to the headless Blender renderer we inject into the container.
+# It ships beside this module; the container has no copy of its own.
+_THUMBNAIL_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "thumbnail.py")
+
+# Runs thumbnail.py against the GLB inside the container. $1 = input GLB path,
+# $2 = output PNG path. Run from /app/converter for parity with the converter
+# (that's where the bpy site/addon state lives). The Cycles-CPU render needs no
+# GL context, but we keep xvfb-run for parity since some bpy operators still
+# expect a window. `set -e` makes any render failure a non-zero exit, which the
+# task treats as "no thumbnail" without blocking the model.
+THUMBNAIL_SCRIPT = (
+    "set -e\n"
+    "mkdir -p /output\n"
+    "cd /app/converter\n"
+    "xvfb-run -a /app/converter/venv/bin/python3.11 /tmp/thumbnail.py \"$1\" \"$2\"\n"
+)
+
+
+@celery_app.task(bind=True, max_retries=0, name="generate_thumbnail")
+def generate_thumbnail_task(self, patent_id: int) -> None:
+    """Render a PNG thumbnail of a patent's converted GLB, then flip it to
+    CONVERTED.
+
+    Enqueued by convert_patent_task once the GLB is on disk. Both the upload and
+    the image-generation pipelines funnel through that task, so this single hook
+    covers both ingestion paths.
+
+    Thumbnailing is best-effort: we try exactly once (max_retries=0) and the
+    patent becomes available (CONVERTED) whether or not the render succeeds — a
+    missing thumbnail must never gate an otherwise-finished model. The render
+    runs in the same hardened, network-less converter container as conversion.
+    """
+    db = SyncSessionLocal()
+    patent: Patent | None = None
+    container_name = f"thumbnailer-{patent_id}-{uuid.uuid4().hex[:8]}"
+
+    try:
+        patent = db.get(Patent, patent_id)
+        if not patent:
+            logger.error("generate_thumbnail_task: patent %d not found", patent_id)
+            return
+        if not patent.glb_file_path:
+            raise RuntimeError("patent has no glb_file_path to thumbnail")
+
+        glb_abs = os.path.join(settings.media_root, patent.glb_file_path)
+        if not os.path.exists(glb_abs):
+            raise FileNotFoundError(f"GLB missing at {glb_abs}")
+
+        # Thumbnail lives next to the GLB so delete_patent_files' glb-dir sweep
+        # cleans it up for free.
+        thumb_rel = f"{os.path.dirname(patent.glb_file_path)}/thumbnail.png"
+        thumb_abs = os.path.join(settings.media_root, thumb_rel)
+
+        create_cmd = _converter_create_cmd(
+            container_name, THUMBNAIL_SCRIPT,
+            ["/tmp/model.glb", "/output/thumbnail.png"],
+        )
+        logger.info("Creating thumbnailer container %s for patent %d",
+                    container_name, patent_id)
+        _docker(create_cmd, check=True)
+
+        # Copy in the GLB plus the renderer script (the image has neither).
+        _docker(["docker", "cp", glb_abs, f"{container_name}:/tmp/model.glb"],
+                check=True)
+        _docker(["docker", "cp", _THUMBNAIL_SCRIPT_PATH,
+                 f"{container_name}:/tmp/thumbnail.py"], check=True)
+
+        result = _docker(
+            ["docker", "start", "-a", container_name], timeout=CONTAINER_TIMEOUT,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Thumbnailer exited {result.returncode}.\n"
+                f"stdout: {result.stdout[-1000:]}\n"
+                f"stderr: {result.stderr[-1000:]}"
+            )
+
+        os.makedirs(os.path.dirname(thumb_abs), exist_ok=True)
+        _docker(
+            ["docker", "cp", f"{container_name}:/output/thumbnail.png", thumb_abs],
+            check=True,
+        )
+        if not os.path.exists(thumb_abs):
+            raise FileNotFoundError(f"Expected thumbnail not found at {thumb_abs}")
+
+        patent.thumbnail_path = thumb_rel
+        logger.info("Patent %d thumbnail rendered -> %s", patent_id, thumb_rel)
+
+    except Exception:
+        # Best-effort: log and fall through. The finally block still flips the
+        # patent to CONVERTED so a thumbnail failure never blocks the model.
+        logger.exception(
+            "Thumbnail render failed for patent %d; making it available without one",
+            patent_id,
+        )
+    finally:
+        if patent:
+            patent.conversion_status = ConversionStatus.CONVERTED
+            db.commit()
         _docker(["docker", "rm", "-f", container_name])
         db.close()
 
@@ -348,8 +455,11 @@ def generate_from_image_task(
             logger.error("generate_from_image_task: patent %d not found", patent_id)
             return
 
-        # -- 1. Mark in-flight ------------------------------------------------
-        patent.conversion_status = ConversionStatus.IN_PROCESSING
+        # -- 1. Mark as generating --------------------------------------------
+        # Distinct from CONVERTING (which the converter uses) so the UI shows
+        # GENERATING -> QUEUED -> CONVERTING -> CONVERTED rather than a
+        # confusing repeated status across the two pipeline halves.
+        patent.conversion_status = ConversionStatus.GENERATING
         patent.conversion_error = None
         db.commit()
 
@@ -397,20 +507,32 @@ def generate_from_image_task(
         if not glb_bytes:
             raise RuntimeError("Hunyuan returned empty response body")
 
-        # -- 4. Persist GLB on the media volume -------------------------------
+        # -- 4. Wrap the raw GLB in a ZIP so it flows through the very same
+        #       converter pipeline as an uploaded GLB archive ----------------
+        # Hunyuan's GLB is not the finished product: it still needs the
+        # converter's post-processing (Blender import -> DRACO re-export). Rather
+        # than duplicate the container plumbing here, we package the GLB as a ZIP,
+        # point the patent at it, and hand off to convert_patent_task — the
+        # generated patent then takes the identical path as a GLB upload.
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         stem = patent.model_filename or f"generated_{patent.id}"
-        glb_rel = f"converted/user_{patent.user_id}/{timestamp}_{stem}/output.glb"
-        glb_abs = os.path.join(settings.media_root, glb_rel)
-        os.makedirs(os.path.dirname(glb_abs), exist_ok=True)
-        with open(glb_abs, "wb") as f:
-            f.write(glb_bytes)
+        zip_rel = f"uploads/user_{patent.user_id}/{timestamp}_generated_{stem}.zip"
+        zip_abs = os.path.join(settings.media_root, zip_rel)
+        os.makedirs(os.path.dirname(zip_abs), exist_ok=True)
+        with zipfile.ZipFile(zip_abs, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{stem}.glb", glb_bytes)
 
-        # -- 5. Success -------------------------------------------------------
-        patent.glb_file_path = glb_rel
-        patent.conversion_status = ConversionStatus.CONVERTED
+        # -- 5. Hand off to the converter queue -------------------------------
+        # Stays QUEUED (not CONVERTED) — generation is only half the pipeline now.
+        # convert_patent_task runs on the default queue, so the single-GPU
+        # `generate` worker is freed immediately instead of blocking on the
+        # CPU/docker conversion.
+        patent.zip_file_path = zip_rel
+        patent.conversion_status = ConversionStatus.QUEUED
         db.commit()
-        logger.info("Patent %d generated successfully -> %s", patent_id, glb_rel)
+        convert_patent_task.delay(patent_id)
+        logger.info("Patent %d generated; queued for conversion -> %s",
+                     patent_id, zip_rel)
 
     except Exception as exc:
         logger.exception("Generation failed for patent %d", patent_id)

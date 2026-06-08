@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.models.user import UserRole
+
 
 class UserRegister(BaseModel):
     username: str = Field(min_length=3, max_length=150)
@@ -24,6 +26,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str
+    role: UserRole
     date_of_birth: date | None
     date_joined: datetime
 

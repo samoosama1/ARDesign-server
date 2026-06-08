@@ -1,13 +1,21 @@
+import enum
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.patent import Patent
+
+
+class UserRole(str, enum.Enum):
+    """Application role. Replaces the dormant Django-era is_staff/is_superuser
+    flags as the single source of truth for the admin panel's authorization."""
+    USER = "USER"
+    ADMIN = "ADMIN"
 
 
 class User(Base):
@@ -26,6 +34,14 @@ class User(Base):
 
     # --- permissions ---
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Active admin-panel authorization gate. The is_staff/is_superuser columns
+    # below are inherited from the Django schema and intentionally unused.
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="userrole_enum"),
+        nullable=False,
+        default=UserRole.USER,
+        server_default=UserRole.USER.value,
+    )
     is_staff: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
